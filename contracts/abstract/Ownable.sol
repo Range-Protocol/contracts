@@ -1,4 +1,5 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0
+
 pragma solidity 0.8.4;
 
 /**
@@ -17,14 +18,6 @@ abstract contract Ownable {
     address internal _manager;
 
     event OwnershipTransferred(address indexed previousManager, address indexed newManager);
-
-    constructor(address manager_) {
-        require(
-            manager_ != address(0x0),
-            "Ownable::constructor: manager cannot be a zero address"
-        );
-        _manager = manager_;
-    }
 
     /**
      * @dev Returns the address of the current manager.
@@ -62,4 +55,6 @@ abstract contract Ownable {
         emit OwnershipTransferred(_manager, newOwner);
         _manager = newOwner;
     }
+
+    uint256[49] private __gap;
 }

@@ -4,9 +4,8 @@ pragma solidity 0.8.4;
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
-
-error NotInitialized();
-error CannotInitialize();
+error MintNotStarted();
+error NotAllowedToUpdateTicks();
 error InvalidManagerFee();
 error OnlyPoolAllowed();
 error InvalidMintAmount();
@@ -16,11 +15,10 @@ error ZeroMintAmount();
 error ZeroUnderlyingBalance();
 error TicksOutOfRange();
 error InvalidTicksSpacing();
+error ZeroTreasuryAddress();
+error OnlyFactoryAllowed();
 
-interface IRangeProtocolVault is
-    IUniswapV3MintCallback,
-    IUniswapV3SwapCallback
-{
+interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback {
     event Minted(
         address indexed receiver,
         uint256 mintAmount,
@@ -48,27 +46,19 @@ interface IRangeProtocolVault is
         uint256 amount1Out
     );
     event FeesEarned(uint256 feesEarned0, uint256 feesEarned1);
-    event UpdateManagerParams(uint16 managerFee, address managerTreasury);
+    event ManagerFeeUpdated(uint16 managerFee);
     event InThePositionStatusSet(bool inThePosition);
     event Swapped(bool zeroForOne, int256 amount0, int256 amount1);
     event TicksSet(int24 lowerTick, int24 upperTick);
-    event Initialized();
+    event MintStarted();
 
-    function initialize(int24 _lowerTick, int24 _upperTick) external;
+    function initialize(address _pool, int24 _tickSpacing, bytes memory data) external;
 
-    function mint(uint256 mintAmount)
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1
-        );
+    function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
-    function burn(uint256 burnAmount)
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1
-        );
+    function mint(uint256 mintAmount) external returns (uint256 amount0, uint256 amount1);
+
+    function burn(uint256 burnAmount) external returns (uint256 amount0, uint256 amount1);
 
     function removeLiquidity() external;
 
@@ -76,58 +66,36 @@ interface IRangeProtocolVault is
         bool zeroForOne,
         int256 swapAmount,
         uint160 sqrtPriceLimitX96
-    ) external returns (
-        int256 amount0,
-        int256 amount1
-    );
+    ) external returns (int256 amount0, int256 amount1);
 
     function addLiquidity(
         int24 newLowerTick,
         int24 newUpperTick,
         uint256 amount0,
         uint256 amount1
-    ) external returns (
-        uint256 remainingAmount0,
-        uint256 remainingAmount1
-    );
+    ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);
 
     function collectManager() external;
+
     function collectTreasury() external;
 
-    function updateManagerParams(int16 newManagerFee, address newManagerTreasury) external;
+    function updateManagerFee(uint16 newManagerFee) external;
 
-    function getMintAmounts(uint256 amount0Max, uint256 amount1Max)
-        external
-        view
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        );
+    function getMintAmounts(
+        uint256 amount0Max,
+        uint256 amount1Max
+    ) external view returns (uint256 amount0, uint256 amount1, uint256 mintAmount);
 
     function getUnderlyingBalances()
         external
         view
-        returns (
-            uint256 amount0Current,
-            uint256 amount1Current
-        );
+        returns (uint256 amount0Current, uint256 amount1Current);
 
-    function getUnderlyingBalancesAtPrice(uint160 sqrtRatioX96)
-        external
-        view
-        returns (
-            uint256 amount0Current,
-            uint256 amount1Current
-        );
+    function getUnderlyingBalancesAtPrice(
+        uint160 sqrtRatioX96
+    ) external view returns (uint256 amount0Current, uint256 amount1Current);
 
-    function getCurrentFees()
-        external
-        view
-        returns (uint256 fee0, uint256 fee1);
+    function getCurrentFees() external view returns (uint256 fee0, uint256 fee1);
 
-    function getPositionID()
-        external
-        view
-        returns (bytes32 positionID);
+    function getPositionID() external view returns (bytes32 positionID);
 }
