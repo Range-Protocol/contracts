@@ -6,11 +6,7 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
 contract SwapTest is IUniswapV3SwapCallback {
-    function swap(
-        address pool,
-        bool zeroForOne,
-        int256 amountSpecified
-    ) external {
+    function swap(address pool, bool zeroForOne, int256 amountSpecified) external {
         (uint160 sqrtRatio, , , , , , ) = IUniswapV3Pool(pool).slot0();
         IUniswapV3Pool(pool).swap(
             address(msg.sender),
@@ -45,14 +41,7 @@ contract SwapTest is IUniswapV3SwapCallback {
         bool zeroForOne,
         int256 amountSpecified,
         uint160 sqrtPriceLimitX96
-    )
-        external
-        returns (
-            int256 amount0Delta,
-            int256 amount1Delta,
-            uint160 nextSqrtRatio
-        )
-    {
+    ) external returns (int256 amount0Delta, int256 amount1Delta, uint160 nextSqrtRatio) {
         (amount0Delta, amount1Delta) = IUniswapV3Pool(pool).swap(
             address(msg.sender),
             zeroForOne,
@@ -72,9 +61,17 @@ contract SwapTest is IUniswapV3SwapCallback {
         address sender = abi.decode(data, (address));
 
         if (amount0Delta > 0) {
-            IERC20(IUniswapV3Pool(msg.sender).token0()).transferFrom(sender, msg.sender, uint256(amount0Delta));
+            IERC20(IUniswapV3Pool(msg.sender).token0()).transferFrom(
+                sender,
+                msg.sender,
+                uint256(amount0Delta)
+            );
         } else if (amount1Delta > 0) {
-            IERC20(IUniswapV3Pool(msg.sender).token1()).transferFrom(sender, msg.sender, uint256(amount1Delta));
+            IERC20(IUniswapV3Pool(msg.sender).token1()).transferFrom(
+                sender,
+                msg.sender,
+                uint256(amount1Delta)
+            );
         }
     }
 }
