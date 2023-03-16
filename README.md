@@ -43,7 +43,7 @@ The only contracts that are in scope for this contest are the four listed below,
 | Contract                                                                                                                        | SLOC | 
 |---------------------------------------------------------------------------------------------------------------------------------|--| 
 | [RangeProtocolFactory.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolFactory.sol) | 121 | 
-| [RangeProtocolVault.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVault.sol)     | 737 |
+| [RangeProtocolVault.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVault.sol)     | 735 |
 | [RangeProtocolVaultStorage.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVaultStorage.sol) | 32 | 
 | [Ownable.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/abstract/Ownable.sol)                  | 60 |
 
