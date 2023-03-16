@@ -46,7 +46,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         uint256 amount1Out
     );
     event FeesEarned(uint256 feesEarned0, uint256 feesEarned1);
-    event UpdateManagerParams(uint16 managerFee, address managerTreasury);
+    event ManagerFeeUpdated(uint16 managerFee);
     event InThePositionStatusSet(bool inThePosition);
     event Swapped(bool zeroForOne, int256 amount0, int256 amount1);
     event TicksSet(int24 lowerTick, int24 upperTick);
@@ -79,7 +79,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
 
     function collectTreasury() external;
 
-    function updateManagerParams(int16 newManagerFee, address newManagerTreasury) external;
+    function updateManagerFee(uint16 newManagerFee) external;
 
     function getMintAmounts(
         uint256 amount0Max,

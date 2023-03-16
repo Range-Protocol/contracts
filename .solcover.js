@@ -1,10 +1,8 @@
 module.exports = {
   skipFiles: [
     "__mocks__",
-    "abstract/GUni.sol",
-    "abstract/OwnableUninitialized.sol",
     "interfaces",
-    "vendor",
+    "uniswap",
     "node_modules",
   ],
 };

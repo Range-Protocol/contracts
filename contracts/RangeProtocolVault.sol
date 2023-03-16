@@ -89,7 +89,7 @@ contract RangeProtocolVault is
         if (_managerFee > MAX_MANAGER_FEE_BPS) revert InvalidManagerFee();
         managerFee = _managerFee;
         _manager = manager;
-        emit UpdateManagerParams(_managerFee, manager);
+        emit ManagerFeeUpdated(_managerFee);
     }
 
     /**
@@ -415,22 +415,15 @@ contract RangeProtocolVault is
     /**
      * @notice updateManagerParams allows updating of manager params by the manager
      * @param newManagerFee Basis Points of fees earned credited to manager (negative to ignore)
-     * @param newManager address that collects manager fees (Zero address to ignore)
      */
-    function updateManagerParams(
-        int16 newManagerFee,
-        address newManager
-    ) external override onlyManager {
-        if (newManagerFee > int16(MAX_MANAGER_FEE_BPS)) revert InvalidManagerFee();
+    function updateManagerFee(uint16 newManagerFee) external override onlyManager {
+        if (newManagerFee > MAX_MANAGER_FEE_BPS) revert InvalidManagerFee();
 
         if (newManagerFee >= 0) {
-            managerFee = uint16(newManagerFee);
-        }
-        if (newManager != address(0)) {
-            _manager = newManager;
+            managerFee = newManagerFee;
         }
 
-        emit UpdateManagerParams(managerFee, newManager);
+        emit ManagerFeeUpdated(newManagerFee);
     }
 
     /**

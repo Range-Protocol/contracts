@@ -245,6 +245,27 @@ describe("RangeProtocolVault", () => {
     );
   });
 
+  describe("Manager Fee", () => {
+    it("should not update manager fee by non manager", async () => {
+      await expect(
+        vault.connect(nonManager).updateManagerFee(100)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should not update manager fee above BPS", async () => {
+      await expect(vault.updateManagerFee(2000)).to.be.revertedWithCustomError(
+        vault,
+        "InvalidManagerFee"
+      );
+    });
+
+    it("should update manager fee by manager", async () => {
+      await expect(vault.updateManagerFee(300))
+        .to.emit(vault, "ManagerFeeUpdated")
+        .withArgs(300);
+    });
+  });
+
   describe("Remove Liquidity", () => {
     before(async () => {
       await vault.updateTicks(lowerTick, upperTick);
