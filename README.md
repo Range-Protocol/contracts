@@ -59,7 +59,7 @@ This also includes **any** OpenZeppelin dependencies being imported. We assume t
 ```
 - If you have a public code repo, please share it here: This contest repo is the only public code repo at this time.
 - How many contracts are in scope?: 4
-- Total SLoC for these contracts?: 950
+- Total SLoC for these contracts?: 948
 - How many external imports are there?: 12
 - How many separate interfaces and struct definitions are there for the contracts within scope?: 2
 - Does most of your code generally use composition or inheritance?: Inheritance
