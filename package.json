@@ -16,6 +16,7 @@
     "prettier": "prettier --write 'contracts/**/*.sol'"
   },
   "devDependencies": {
+    "@anders-t/ethers-ledger": "^1.0.4",
     "@nomicfoundation/hardhat-chai-matchers": "^1.0.6",
     "@nomiclabs/hardhat-ethers": "npm:hardhat-deploy-ethers",
     "@nomiclabs/hardhat-etherscan": "2.1.2",
