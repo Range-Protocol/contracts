@@ -21,6 +21,7 @@ let token1: IERC20;
 let manager: SignerWithAddress;
 let treasury: SignerWithAddress;
 let nonManager: SignerWithAddress;
+let newManager: SignerWithAddress;
 const managerFee = 500;
 const poolFee = 10000;
 const name = "Test Token";
@@ -29,7 +30,7 @@ let initializeData: any;
 
 describe("RangeProtocolFactory", () => {
   before(async function () {
-    [manager, nonManager, treasury] = await ethers.getSigners();
+    [manager, nonManager, treasury, newManager] = await ethers.getSigners();
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
@@ -143,5 +144,23 @@ describe("RangeProtocolFactory", () => {
         initializeData
       )
     ).to.be.revertedWith("VaultAlreadyExists()");
+  });
+
+  describe("transferOwnership", () => {
+    it("should not be able to transferOwnership by non manager", async () => {
+      await expect(
+        factory.connect(nonManager).transferOwnership(newManager.address)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should be able to transferOwnership by manager", async () => {
+      await expect(factory.transferOwnership(newManager.address))
+        .to.emit(factory, "OwnershipTransferred")
+        .withArgs(manager.address, newManager.address);
+      expect(await factory.manager()).to.be.equal(newManager.address);
+
+      await factory.connect(newManager).transferOwnership(manager.address);
+      expect(await factory.manager()).to.be.equal(manager.address);
+    });
   });
 });

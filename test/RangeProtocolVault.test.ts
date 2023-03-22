@@ -29,6 +29,7 @@ let token1: IERC20;
 let manager: SignerWithAddress;
 let treasury: SignerWithAddress;
 let nonManager: SignerWithAddress;
+let newManager: SignerWithAddress;
 let user2: SignerWithAddress;
 const managerFee = 500;
 const poolFee = 3000;
@@ -39,11 +40,11 @@ const amount1: BigNumber = parseEther("3");
 let initializeData: any;
 const lowerTick = -887220;
 const upperTick = 887220;
-8388607;
 
 describe("RangeProtocolVault", () => {
   before(async () => {
-    [manager, nonManager, treasury, user2] = await ethers.getSigners();
+    [manager, nonManager, treasury, user2, newManager] =
+      await ethers.getSigners();
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
     );
@@ -500,9 +501,11 @@ describe("RangeProtocolVault", () => {
         (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 
       expect(
-        ethers.utils.hexStripZeros(
-          await ethers.provider.getStorageAt(vault.address, implSlot)
-        )
+        "0x" +
+          (await ethers.provider.getStorageAt(vault.address, implSlot)).slice(
+            26,
+            66
+          )
       ).to.be.equal(newVaultImpl.address.toLowerCase());
 
       await expect(
@@ -512,10 +515,30 @@ describe("RangeProtocolVault", () => {
         .withArgs(vault.address, newVaultImpl1.address);
 
       expect(
-        ethers.utils.hexStripZeros(
-          await ethers.provider.getStorageAt(vault.address, implSlot)
-        )
+        "0x" +
+          (await ethers.provider.getStorageAt(vault.address, implSlot)).slice(
+            26,
+            66
+          )
       ).to.be.equal(newVaultImpl1.address.toLowerCase());
+    });
+  });
+
+  describe("transferOwnership", () => {
+    it("should not be able to transferOwnership by non manager", async () => {
+      await expect(
+        vault.connect(nonManager).transferOwnership(newManager.address)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should be able to transferOwnership by manager", async () => {
+      await expect(vault.transferOwnership(newManager.address))
+        .to.emit(vault, "OwnershipTransferred")
+        .withArgs(manager.address, newManager.address);
+      expect(await vault.manager()).to.be.equal(newManager.address);
+
+      await vault.connect(newManager).transferOwnership(manager.address);
+      expect(await vault.manager()).to.be.equal(manager.address);
     });
   });
 });
