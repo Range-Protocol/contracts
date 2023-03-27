@@ -29,4 +29,9 @@ abstract contract RangeProtocolVaultStorage {
     bool public mintStarted;
 
     address public factory;
+
+    uint256 public token0Supplied;
+    uint256 public token1Supplied;
+
+    // NOTE: Only add more state variable below it and do not change the order of above state variables.
 }

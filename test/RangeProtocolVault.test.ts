@@ -185,6 +185,8 @@ describe("RangeProtocolVault", () => {
     expect(await vault.totalSupply()).to.be.equal(mintAmount);
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(_amount0);
     expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(_amount1);
+    expect(await vault.token0Supplied()).to.be.equal(_amount0);
+    expect(await vault.token1Supplied()).to.be.equal(_amount1);
   });
 
   it("should mint with non zero totalSupply", async () => {
@@ -196,10 +198,20 @@ describe("RangeProtocolVault", () => {
       amount1: _amount1,
     } = await vault.getMintAmounts(amount0, amount1);
 
+    const token0SuppliedBefore = await vault.token0Supplied();
+    const token1SuppliedBefore = await vault.token1Supplied();
+
     expect(await vault.totalSupply()).to.not.be.equal(0);
     await expect(vault.mint(mintAmount))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
+
+    expect(await vault.token0Supplied()).to.be.equal(
+      token0SuppliedBefore.add(_amount0)
+    );
+    expect(await vault.token1Supplied()).to.be.equal(
+      token1SuppliedBefore.add(_amount1)
+    );
   });
 
   it("should not burn non existing vault shares", async () => {
@@ -222,15 +234,15 @@ describe("RangeProtocolVault", () => {
     expect(await vault.totalSupply()).to.be.equal(
       totalSupplyBefore.sub(burnAmount)
     );
+
+    const amount0Got = amount0Current.mul(burnAmount).div(totalSupplyBefore);
+    const amount1Got = amount1Current.mul(burnAmount).div(totalSupplyBefore);
+
     expect(await token0.balanceOf(manager.address)).to.be.equal(
-      userBalance0Before.add(
-        amount0Current.mul(burnAmount).div(totalSupplyBefore)
-      )
+      userBalance0Before.add(amount0Got)
     );
     expect(await token1.balanceOf(manager.address)).to.be.equal(
-      userBalance1Before.add(
-        amount1Current.mul(burnAmount).div(totalSupplyBefore)
-      )
+      userBalance1Before.add(amount1Got)
     );
   });
 
