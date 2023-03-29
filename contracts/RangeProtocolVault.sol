@@ -181,12 +181,12 @@ contract RangeProtocolVault is
         }
 
         if (amount0 > 0) {
-            token0.safeTransferFrom(msg.sender, address(this), amount0);
             token0Supplied += amount0;
+            token0.safeTransferFrom(msg.sender, address(this), amount0);
         }
         if (amount1 > 0) {
-            token1.safeTransferFrom(msg.sender, address(this), amount1);
             token1Supplied += amount1;
+            token1.safeTransferFrom(msg.sender, address(this), amount1);
         }
 
         _mint(msg.sender, mintAmount);
@@ -249,12 +249,12 @@ contract RangeProtocolVault is
         }
 
         if (amount0 > 0) {
-            token0.safeTransfer(msg.sender, amount0);
             token0Supplied -= amount0;
+            token0.safeTransfer(msg.sender, amount0);
         }
         if (amount1 > 0) {
-            token1.safeTransfer(msg.sender, amount1);
             token1Supplied -= amount1;
+            token1.safeTransfer(msg.sender, amount1);
         }
 
         emit Burned(msg.sender, burnAmount, amount0, amount1);
