@@ -8,6 +8,7 @@ import "@typechain/hardhat";
 import "hardhat-deploy";
 import "solidity-coverage";
 import "@nomicfoundation/hardhat-chai-matchers";
+import "hardhat-gas-reporter"
 
 // Process Env Variables
 import * as dotenv from "dotenv";
