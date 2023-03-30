@@ -98,4 +98,15 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
     function getCurrentFees() external view returns (uint256 fee0, uint256 fee1);
 
     function getPositionID() external view returns (bytes32 positionID);
+
+    struct UserVaultInfo {
+        address user;
+        uint256 token0;
+        uint256 token1;
+    }
+
+    function getUserVaults(
+        uint256 fromIdx,
+        uint256 toIdx
+    ) external view returns (UserVaultInfo[] memory);
 }

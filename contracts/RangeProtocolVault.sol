@@ -180,10 +180,16 @@ contract RangeProtocolVault is
             revert MintNotAllowed();
         }
 
+        if (!userVaults[msg.sender].exists) {
+            userVaults[msg.sender].exists = true;
+            users.push(msg.sender);
+        }
         if (amount0 > 0) {
+            userVaults[msg.sender].token0 += amount0;
             token0.safeTransferFrom(msg.sender, address(this), amount0);
         }
         if (amount1 > 0) {
+            userVaults[msg.sender].token1 += amount1;
             token1.safeTransferFrom(msg.sender, address(this), amount1);
         }
 
@@ -213,6 +219,7 @@ contract RangeProtocolVault is
     ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert InvalidBurnAmount();
         uint256 totalSupply = totalSupply();
+        uint256 balanceBefore = balanceOf(msg.sender);
         _burn(msg.sender, burnAmount);
 
         if (inThePosition) {
@@ -247,9 +254,15 @@ contract RangeProtocolVault is
         }
 
         if (amount0 > 0) {
+            userVaults[msg.sender].token0 =
+                (userVaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
+                balanceBefore;
             token0.safeTransfer(msg.sender, amount0);
         }
         if (amount1 > 0) {
+            userVaults[msg.sender].token1 =
+                (userVaults[msg.sender].token1 * (balanceBefore - burnAmount)) /
+                balanceBefore;
             token1.safeTransfer(msg.sender, amount1);
         }
 
@@ -493,6 +506,31 @@ contract RangeProtocolVault is
         fee0 = _feesEarned(true, feeGrowthInside0Last, tick, liquidity) + uint256(tokensOwed0);
         fee1 = _feesEarned(false, feeGrowthInside1Last, tick, liquidity) + uint256(tokensOwed1);
         (fee0, fee1) = _netFees(fee0, fee1);
+    }
+
+    /**
+     * @notice returns array of current user vaults. This function is only intended to be called off-chain.
+     * @param fromIdx start index to fetch the user vaults info from.
+     * @param toIdx end index to fetch the user vault to.
+     */
+    function getUserVaults(
+        uint256 fromIdx,
+        uint256 toIdx
+    ) external view override returns (UserVaultInfo[] memory) {
+        if (fromIdx == 0 && toIdx == 0) {
+            toIdx = users.length;
+        }
+        UserVaultInfo[] memory usersVaultInfo = new UserVaultInfo[](toIdx - fromIdx);
+        uint256 count;
+        for (uint256 i = fromIdx; i < toIdx; i++) {
+            UserVault memory userVault = userVaults[users[i]];
+            usersVaultInfo[count++] = UserVaultInfo({
+                user: users[i],
+                token0: userVault.token0,
+                token1: userVault.token1
+            });
+        }
+        return usersVaultInfo;
     }
 
     /**

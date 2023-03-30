@@ -29,4 +29,13 @@ abstract contract RangeProtocolVaultStorage {
     bool public mintStarted;
 
     address public factory;
+
+    struct UserVault {
+        bool exists;
+        uint256 token0;
+        uint256 token1;
+    }
+    mapping(address => UserVault) public userVaults;
+    address[] public users;
+    // NOTE: Only add more state variable below it and do not change the order of above state variables.
 }
