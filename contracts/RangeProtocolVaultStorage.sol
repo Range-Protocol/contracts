@@ -20,9 +20,11 @@ abstract contract RangeProtocolVaultStorage {
     IERC20Upgradeable public token1;
     int24 public tickSpacing;
 
-    /// @notice RangeProtocol treasury
+    /// @notice unused
     address public treasury;
+    /// @notice unused
     uint256 public treasuryBalance0;
+    /// @notice unused
     uint256 public treasuryBalance1;
 
     bool public inThePosition;

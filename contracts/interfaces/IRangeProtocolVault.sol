@@ -77,8 +77,6 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
 
     function collectManager() external;
 
-    function collectTreasury() external;
-
     function updateManagerFee(uint16 newManagerFee) external;
 
     function getMintAmounts(

@@ -29,7 +29,7 @@ import "./abstract/Ownable.sol";
  * The manager of the contract can remove liquidity from uniswap v3 pool and deposit into a newer take range to maximise
  * the profit by keeping liquidity out of the pool under high volatility periods.
  *
- * Part of the fee earned from uniswap v3 position is paid to treasury and manager.
+ * Part of the fee earned from uniswap v3 position is paid to manager.
  */
 contract RangeProtocolVault is
     Initializable,
@@ -43,7 +43,7 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    uint16 public constant TREASURY_FEE_BPS = 250;
+    uint16 public constant BASE_FEE_BPS = 250;
     /// Set the CAP on manager fee as 10%.
     /// Manager fee cannot be set more than 10% of the total fee earned.
     uint16 public constant MAX_MANAGER_FEE_BPS = 1000;
@@ -235,7 +235,7 @@ contract RangeProtocolVault is
             amount0 =
                 burn0 +
                 FullMath.mulDiv(
-                    token0.balanceOf(address(this)) - burn0 - managerBalance0 - treasuryBalance0,
+                    token0.balanceOf(address(this)) - burn0 - managerBalance0,
                     burnAmount,
                     totalSupply
                 );
@@ -243,7 +243,7 @@ contract RangeProtocolVault is
             amount1 =
                 burn1 +
                 FullMath.mulDiv(
-                    token1.balanceOf(address(this)) - burn1 - managerBalance1 - treasuryBalance1,
+                    token1.balanceOf(address(this)) - burn1 - managerBalance1,
                     burnAmount,
                     totalSupply
                 );
@@ -410,21 +410,6 @@ contract RangeProtocolVault is
         }
     }
 
-    /// @notice collectTreasury collect range-protocol fees accrued
-    function collectTreasury() external override {
-        uint256 amount0 = treasuryBalance0;
-        uint256 amount1 = treasuryBalance1;
-        treasuryBalance0 = 0;
-        treasuryBalance1 = 0;
-
-        if (amount0 > 0) {
-            token0.safeTransfer(treasury, amount0);
-        }
-        if (amount1 > 0) {
-            token1.safeTransfer(treasury, amount1);
-        }
-    }
-
     /**
      * @notice updateManagerParams allows updating of manager params by the manager
      * @param newManagerFee Basis Points of fees earned credited to manager (negative to ignore)
@@ -477,7 +462,7 @@ contract RangeProtocolVault is
     /**
      * @notice compute total underlying token0 and token1 token supply at provided price
      * includes current liquidity invested in uniswap position, current fees earned
-     * and any uninvested leftover (but does not include manager or treasury fees accrued)
+     * and any uninvested leftover (but does not include manager fees accrued)
      * @param sqrtRatioX96 price to computer underlying balances at
      * @return amount0Current current total underlying balance of token0
      * @return amount1Current current total underlying balance of token1
@@ -544,7 +529,7 @@ contract RangeProtocolVault is
     /**
      * @notice compute total underlying token0 and token1 token supply at current price
      * includes current liquidity invested in uniswap position, current fees earned
-     * and any uninvested leftover (but does not include manager or treasury fees accrued)
+     * and any uninvested leftover (but does not include manager fees accrued)
      * @return amount0Current current total underlying balance of token0
      * @return amount1Current current total underlying balance of token1
      */
@@ -591,16 +576,8 @@ contract RangeProtocolVault is
             (fee0, fee1) = _netFees(fee0, fee1);
         }
 
-        amount0Current +=
-            fee0 +
-            token0.balanceOf(address(this)) -
-            managerBalance0 -
-            treasuryBalance0;
-        amount1Current +=
-            fee1 +
-            token1.balanceOf(address(this)) -
-            managerBalance1 -
-            treasuryBalance1;
+        amount0Current += fee0 + token0.balanceOf(address(this)) - managerBalance0;
+        amount1Current += fee1 + token1.balanceOf(address(this)) - managerBalance1;
     }
 
     /**
@@ -707,25 +684,23 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _applyFees applies the manager and treasury fee the global balance tracking variables
+     * @notice _applyFees applies the manager fee the global balance tracking variables
      * @param _fee0 fee to apply in token0
      * @param _fee1 fee to apply in token1
      */
     function _applyFees(uint256 _fee0, uint256 _fee1) private {
-        treasuryBalance0 += (_fee0 * TREASURY_FEE_BPS) / 10_000;
-        treasuryBalance1 += (_fee1 * TREASURY_FEE_BPS) / 10_000;
         // managerFee is read from storage, so storing in a local variable saves gas cost.
         uint16 _managerFee = managerFee;
-        managerBalance0 += (_fee0 * _managerFee) / 10_000;
-        managerBalance1 += (_fee1 * _managerFee) / 10_000;
+        managerBalance0 += (_fee0 * (BASE_FEE_BPS + _managerFee)) / 10_000;
+        managerBalance1 += (_fee1 * (BASE_FEE_BPS + _managerFee)) / 10_000;
     }
 
     /**
-     * @notice _netFees computes the fee share for manager and treasury from collected raw fee
+     * @notice _netFees computes the fee share for manager from collected raw fee
      * @param rawFee0 fee collected in token0
      * @param rawFee1 fee collected in token1
-     * @param fee0 fee in token0 after manager and treasury shares are deducted
-     * @param fee1 fee in token1 after manager and treasury shares are deducted
+     * @param fee0 fee in token0 after manager shares are deducted
+     * @param fee1 fee in token1 after manager shares are deducted
      */
     function _netFees(
         uint256 rawFee0,
@@ -733,8 +708,8 @@ contract RangeProtocolVault is
     ) private view returns (uint256 fee0, uint256 fee1) {
         // managerFee is read from storage, so storing in a local variable saves gas cost.
         uint16 _managerFee = managerFee;
-        uint256 deduct0 = (rawFee0 * (TREASURY_FEE_BPS + _managerFee)) / 10_000;
-        uint256 deduct1 = (rawFee1 * (TREASURY_FEE_BPS + _managerFee)) / 10_000;
+        uint256 deduct0 = (rawFee0 * (BASE_FEE_BPS + _managerFee)) / 10_000;
+        uint256 deduct1 = (rawFee1 * (BASE_FEE_BPS + _managerFee)) / 10_000;
         fee0 = rawFee0 - deduct0;
         fee1 = rawFee1 - deduct1;
     }
