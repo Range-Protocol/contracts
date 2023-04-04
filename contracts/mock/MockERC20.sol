@@ -8,4 +8,8 @@ contract MockERC20 is ERC20Upgradeable {
         __ERC20_init("", "TOKEN");
         _mint(msg.sender, 100000e18);
     }
+
+    function mint() external {
+        _mint(msg.sender, 10000e18);
+    }
 }

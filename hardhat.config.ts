@@ -77,6 +77,9 @@ const config: HardhatUserConfig = {
       {
         artifacts: "node_modules/@uniswap/v3-core/artifacts",
       },
+      {
+        artifacts: "node_modules/@uniswap/v3-periphery/artifacts",
+      },
     ],
   },
   typechain: {
