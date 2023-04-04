@@ -285,6 +285,12 @@ describe("RangeProtocolVault::exposure", () => {
         console.log("==================================================");
 
         console.log("perform vault swap to maintain users' vault exposure");
+        let initialAmountBaseToken, initialAmountQuoteToken, currentAmountBaseToken, currentAmountQuoteToken;
+        initialAmountBaseToken = token0VaultTotal;
+        initialAmountQuoteToken = token1VaultTotal;
+        currentAmountBaseToken = amount0Current3;
+        currentAmountQuoteToken = amount1Current3;
+
         const swapAmountToken0 = amount0Current3.sub(token0VaultTotal);
         const swapAmountToken1 = amount1Current3.sub(token1VaultTotal);
 
@@ -296,23 +302,25 @@ describe("RangeProtocolVault::exposure", () => {
         const {sqrtPriceX96} = await univ3Pool.slot0();
         const liquidity = await univ3Pool.liquidity();
 
-        const nextPrice = swapAmountToken1.gt(0)
+        const nextPrice = currentAmountBaseToken.gt(initialAmountBaseToken)
+            // there is profit in base token that we swap to quote token
             ? await mockSqrtPriceMath.getNextSqrtPriceFromInput(
                 sqrtPriceX96,
                 liquidity,
-                swapAmountToken1,
-                false
+                currentAmountBaseToken.sub(initialAmountBaseToken),
+                true
             )
+            // there is loss in base token that is realized in quote token
             : await mockSqrtPriceMath.getNextSqrtPriceFromInput(
                 sqrtPriceX96,
                 liquidity,
-                swapAmountToken0,
-                true
+                initialAmountBaseToken.sub(currentAmountBaseToken),
+                false
             );
 
         await vault.swap(
-            !swapAmountToken1.gt(bn(0)),
-            swapAmountToken1.gt(bn(0)) ? swapAmountToken1 : swapAmountToken0,
+            currentAmountBaseToken.gt(initialAmountBaseToken),
+            currentAmountBaseToken.sub(initialAmountBaseToken),
             nextPrice
         );
         console.log("==================================================");
