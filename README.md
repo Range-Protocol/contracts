@@ -24,12 +24,12 @@ The Range Protocol operates as follows:
 
 The only contracts that are in scope for this contest are the four listed below, excluding any concerns regarding centralization or malicious administrator risk.
 
-| Contract                                                                                                                        | SLOC | 
-|---------------------------------------------------------------------------------------------------------------------------------|--| 
-| [RangeProtocolFactory.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolFactory.sol) | 121 | 
-| [RangeProtocolVault.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVault.sol)     | 735 |
-| [RangeProtocolVaultStorage.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVaultStorage.sol) | 32 | 
-| [Ownable.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/abstract/Ownable.sol)                  | 60 |
+| Contract                                                                                                                        | 
+|---------------------------------------------------------------------------------------------------------------------------------|
+| [RangeProtocolFactory.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolFactory.sol) |
+| [RangeProtocolVault.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVault.sol)     |
+| [RangeProtocolVaultStorage.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVaultStorage.sol) |
+| [Ownable.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/abstract/Ownable.sol)                  |
 
 
 # Tests
