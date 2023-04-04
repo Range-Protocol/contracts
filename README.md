@@ -1,24 +1,8 @@
 # Range Protocol
-- Total Prize Pool: Sum of below awards
-
-- Join [C4 Discord](https://discord.gg/code4rena) to register
-- Submit findings [using the C4 form]()
-- [Read our guidelines for more details](https://docs.code4rena.com/roles/wardens)
-- Starts  March 08, 2023 20:00 UTC
-- Ends March 15, 2023 20:00 UTC
-
-## Automated Findings / Publicly Known Issues
-
-Automated findings output for the contest can be found [here](https://gist.github.com/Picodes/01427c59b07c651699136589541159a7) within an hour of contest opening.
-
-*Note for C4 wardens: Anything included in the automated findings output is considered a publicly known issue and is ineligible for awards.*
 
 # Overview
 
 Range Protocol is a Uniswap V2-like interface which enables providing fungible liquidity to Uniswap V3 for arbitrary liquidity provision: one-sided, lop-sided, and balanced
-
-- Twitter [@Range_Protocol](https://t.co/MvReUgHkld)
-- Discord (https://t.co/MvReUgHkld)
 
 [Range Protocol](https://www.rangeprotocol.com/) is a Uniswap V3 liquidity provision system consisting of:
 - [RangeProtocolFactory.sol](https://github.com/Range-Protocol/contracts/blob/master/contracts/RangeProtocolFactory.sol) contract that allows creating of Range Protocol vaults. It creates `ERC1967` proxies in front of provided implementation contracts.
@@ -47,38 +31,6 @@ The only contracts that are in scope for this contest are the four listed below,
 | [RangeProtocolVaultStorage.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVaultStorage.sol) | 32 | 
 | [Ownable.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/abstract/Ownable.sol)                  | 60 |
 
-## Out of scope
-
-Every file and contract function **not explicitly listed above is considered out of scope** for this contest in terms of both security and gas optimization. Any changes to the smart contracts which are stylistic in nature are also out of scope.
-
-This also includes the `IRangeProtocolFactory` and `IRangeProtocolVault` interface contracts, and `TickMath` and `LiquidityAmounts` Uniswap V3 contracts.
-
-This also includes **any** OpenZeppelin dependencies being imported. We assume these contracts to be safe. We know there may exist more gas-optimized alternatives to these contracts but that consideration remains out of scope.
-
-## Scoping Details
-```
-- If you have a public code repo, please share it here: This contest repo is the only public code repo at this time.
-- How many contracts are in scope?: 4
-- Total SLoC for these contracts?: 948
-- How many external imports are there?: 12
-- How many separate interfaces and struct definitions are there for the contracts within scope?: 2
-- Does most of your code generally use composition or inheritance?: Inheritance
-- How many external calls?: two contracts: uniswap pool and factory
-- What is the overall line coverage percentage provided by your tests?: above 90%
-- Is there a need to understand a separate part of the codebase / get context in order to audit this part of the protocol?: True
-- Please describe required context: Range Protocol is a Uniswap V2-like interface which enables providing fungible liquidity to Uniswap V3 for arbitrary liquidity provision: one-sided, lop-sided, and balanced.
-- Does it use an oracle?: No
-- Does the token conform to the ERC20 standard?: True
-- Are there any novel or unique curve logic or mathematical models?: No.
-- Does it use a timelock function?: No
-- Is it an NFT?: No
-- Does it have an AMM?: True
-- Is it a fork of a popular project?: No  
-- Does it use rollups?: No
-- Is it multi-chain?: No
-- Does it use a side-chain?: No
-- Describe any specific areas you would like addressed: We are most particularly concerned about ensuring that there is no attack vector that can mint the vault shares inaccurately and not based on tick range when vault is in the position and `token0` and `token1` ratio when vault is out of the position.
-```
 
 # Tests
 
