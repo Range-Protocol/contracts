@@ -47,7 +47,7 @@ contract RangeProtocolVault is
     /// Performance fee cannot be set more than 10% of the fee earned from uniswap v3 pool.
     uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
-    uint16 public constant MAX_MANAGER_FEE_BPS = 100;
+    uint16 public constant MAX_MANAGING_FEE_BPS = 100;
 
     constructor() {
         _disableInitializers();
@@ -416,7 +416,7 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGER_FEE_BPS) revert InvalidManagingFee();
+        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert InvalidManagingFee();
         if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert InvalidPerformanceFee();
 
         if (newManagingFee >= 0) {
