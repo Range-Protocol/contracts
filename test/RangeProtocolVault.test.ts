@@ -27,7 +27,6 @@ let univ3Pool: IUniswapV3Pool;
 let token0: IERC20;
 let token1: IERC20;
 let manager: SignerWithAddress;
-let treasury: SignerWithAddress;
 let nonManager: SignerWithAddress;
 let newManager: SignerWithAddress;
 let user2: SignerWithAddress;
@@ -41,10 +40,9 @@ let initializeData: any;
 const lowerTick = -887220;
 const upperTick = 887220;
 
-describe("RangeProtocolVault", () => {
+describe.only("RangeProtocolVault", () => {
   before(async () => {
-    [manager, nonManager, treasury, user2, newManager] =
-      await ethers.getSigners();
+    [manager, nonManager, user2, newManager] = await ethers.getSigners();
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
     );
@@ -77,7 +75,6 @@ describe("RangeProtocolVault", () => {
     await univ3Pool.increaseObservationCardinalityNext("15");
 
     initializeData = getInitializeData({
-      treasuryAddress: treasury.address,
       managerAddress: manager.address,
       managerFee,
       name,
@@ -431,11 +428,9 @@ describe("RangeProtocolVault", () => {
   });
 
   describe("Fee collection", () => {
-    it("should manager and treasury collect fee", async () => {
+    it("manager should collect fee", async () => {
       expect(await vault.managerBalance0()).to.be.equal(0);
       expect(await vault.managerBalance1()).to.be.equal(0);
-      expect(await vault.treasuryBalance0()).to.be.equal(0);
-      expect(await vault.treasuryBalance1()).to.be.equal(0);
 
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
@@ -450,33 +445,26 @@ describe("RangeProtocolVault", () => {
 
       const managerBalance0 = await vault.managerBalance0();
       const managerBalance1 = await vault.managerBalance1();
-      const treasuryBalance0 = await vault.treasuryBalance0();
-      const treasuryBalance1 = await vault.treasuryBalance1();
 
       const totalFee = {
-        fee0: fee0.add(managerBalance0).add(treasuryBalance0),
-        fee1: fee1.add(managerBalance1).add(treasuryBalance1),
+        fee0: fee0.add(managerBalance0),
+        fee1: fee1.add(managerBalance1),
       };
+
+      const managerFee = bn(await vault.managerFee());
+      const baseFee = await vault.BASE_FEE_BPS();
+
       expect(managerBalance0).to.be.equal(
-        totalFee.fee0.mul(await vault.managerFee()).div(bn(10_000))
+        totalFee.fee0.mul(managerFee.add(baseFee)).div(bn(10_000))
       );
       expect(managerBalance1).to.be.equal(
-        totalFee.fee1.mul(await vault.managerFee()).div(bn(10_000))
-      );
-      expect(treasuryBalance0).to.be.equal(
-        totalFee.fee0.mul(await vault.TREASURY_FEE_BPS()).div(bn(10_000))
-      );
-      expect(treasuryBalance1).to.be.equal(
-        totalFee.fee1.mul(await vault.TREASURY_FEE_BPS()).div(bn(10_000))
+        totalFee.fee1.mul(managerFee.add(baseFee)).div(bn(10_000))
       );
 
       const managerBalance0Before = await token0.balanceOf(manager.address);
       const managerBalance1Before = await token1.balanceOf(manager.address);
-      const treasuryBalance0Before = await token0.balanceOf(treasury.address);
-      const treasuryBalance1Before = await token1.balanceOf(treasury.address);
 
       await vault.connect(manager).collectManager();
-      await vault.connect(treasury).collectTreasury();
 
       expect(await token0.balanceOf(manager.address)).to.be.gte(
         managerBalance0Before
@@ -484,17 +472,8 @@ describe("RangeProtocolVault", () => {
       expect(await token1.balanceOf(manager.address)).to.be.gte(
         managerBalance1Before
       );
-      expect(await token0.balanceOf(treasury.address)).to.be.gte(
-        treasuryBalance0Before
-      );
-      expect(await token1.balanceOf(manager.address)).to.be.gte(
-        treasuryBalance1Before
-      );
-
       expect(await vault.managerBalance0()).to.be.equal(0);
       expect(await vault.managerBalance1()).to.be.equal(0);
-      expect(await vault.treasuryBalance0()).to.be.equal(0);
-      expect(await vault.treasuryBalance1()).to.be.equal(0);
     });
   });
 

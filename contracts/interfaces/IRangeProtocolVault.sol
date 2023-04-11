@@ -15,7 +15,6 @@ error ZeroMintAmount();
 error ZeroUnderlyingBalance();
 error TicksOutOfRange();
 error InvalidTicksSpacing();
-error ZeroTreasuryAddress();
 error OnlyFactoryAllowed();
 
 interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback {

@@ -66,12 +66,11 @@ contract RangeProtocolVault is
         bytes memory data
     ) external override initializer {
         (
-            address _treasury,
             address manager,
             uint16 _managerFee,
             string memory _name,
             string memory _symbol
-        ) = abi.decode(data, (address, address, uint16, string, string));
+        ) = abi.decode(data, (address, uint16, string, string));
 
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -82,9 +81,6 @@ contract RangeProtocolVault is
         token1 = IERC20Upgradeable(pool.token1());
         tickSpacing = _tickSpacing;
         factory = msg.sender;
-
-        if (_treasury == address(0x0)) revert ZeroTreasuryAddress();
-        treasury = _treasury;
 
         if (_managerFee > MAX_MANAGER_FEE_BPS) revert InvalidManagerFee();
         managerFee = _managerFee;
