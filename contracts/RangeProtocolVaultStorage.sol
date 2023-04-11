@@ -11,7 +11,7 @@ abstract contract RangeProtocolVaultStorage {
     int24 public lowerTick;
     int24 public upperTick;
 
-    uint16 public managerFee;
+    uint16 public managingFee;
     uint256 public managerBalance0;
     uint256 public managerBalance1;
 
@@ -20,10 +20,10 @@ abstract contract RangeProtocolVaultStorage {
     IERC20Upgradeable public token1;
     int24 public tickSpacing;
 
-    /// @notice RangeProtocol treasury
-    address public treasury;
-    uint256 public treasuryBalance0;
-    uint256 public treasuryBalance1;
+    /// @notice Unused slots
+    address public unusedSlot0;
+    uint256 public unusedSlot1;
+    uint256 public unusedSlot2;
 
     bool public inThePosition;
     bool public mintStarted;
@@ -37,5 +37,7 @@ abstract contract RangeProtocolVaultStorage {
     }
     mapping(address => UserVault) public userVaults;
     address[] public users;
+
+    uint16 public performanceFee;
     // NOTE: Only add more state variable below it and do not change the order of above state variables.
 }

@@ -27,11 +27,9 @@ let univ3Pool: IUniswapV3Pool;
 let token0: IERC20;
 let token1: IERC20;
 let manager: SignerWithAddress;
-let treasury: SignerWithAddress;
 let nonManager: SignerWithAddress;
 let newManager: SignerWithAddress;
 let user2: SignerWithAddress;
-const managerFee = 500;
 const poolFee = 3000;
 const name = "Test Token";
 const symbol = "TT";
@@ -43,8 +41,7 @@ const upperTick = 887220;
 
 describe("RangeProtocolVault", () => {
   before(async () => {
-    [manager, nonManager, treasury, user2, newManager] =
-      await ethers.getSigners();
+    [manager, nonManager, user2, newManager] = await ethers.getSigners();
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
     );
@@ -77,9 +74,7 @@ describe("RangeProtocolVault", () => {
     await univ3Pool.increaseObservationCardinalityNext("15");
 
     initializeData = getInitializeData({
-      treasuryAddress: treasury.address,
       managerAddress: manager.address,
-      managerFee,
       name,
       symbol,
     });
@@ -250,8 +245,20 @@ describe("RangeProtocolVault", () => {
     const balanceBefore = await vault.balanceOf(manager.address);
     const userVault0Before = (await vault.userVaults(manager.address)).token0;
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
-    await vault.burn(burnAmount);
+    await vault.updateFees(50, 250);
 
+    const managingFee = await vault.managingFee();
+    const totalSupply = await vault.totalSupply();
+    const vaultShares = await vault.balanceOf(manager.address);
+    const userBalance0 = amount0Current.mul(vaultShares).div(totalSupply);
+    const managingFee0 = userBalance0.mul(managingFee).div(10_000);
+
+    const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
+    const managingFee1 = userBalance1.mul(managingFee).div(10_000);
+
+    await expect(vault.burn(burnAmount))
+      .to.emit(vault, "ManagingFeeEarned")
+      .withArgs(managingFee0, managingFee1);
     expect(await vault.totalSupply()).to.be.equal(
       totalSupplyBefore.sub(burnAmount)
     );
@@ -260,10 +267,10 @@ describe("RangeProtocolVault", () => {
     const amount1Got = amount1Current.mul(burnAmount).div(totalSupplyBefore);
 
     expect(await token0.balanceOf(manager.address)).to.be.equal(
-      userBalance0Before.add(amount0Got)
+      userBalance0Before.add(amount0Got).sub(managingFee0)
     );
     expect(await token1.balanceOf(manager.address)).to.be.equal(
-      userBalance1Before.add(amount1Got)
+      userBalance1Before.add(amount1Got).sub(managingFee1)
     );
     expect((await vault.userVaults(manager.address)).token0).to.be.equal(
       userVault0Before.mul(balanceBefore.sub(burnAmount)).div(balanceBefore)
@@ -295,23 +302,30 @@ describe("RangeProtocolVault", () => {
   });
 
   describe("Manager Fee", () => {
-    it("should not update manager fee by non manager", async () => {
+    it("should not update managing and performance fee by non manager", async () => {
       await expect(
-        vault.connect(nonManager).updateManagerFee(100)
+        vault.connect(nonManager).updateFees(100, 1000)
       ).to.be.revertedWith("Ownable: caller is not the manager");
     });
 
-    it("should not update manager fee above BPS", async () => {
-      await expect(vault.updateManagerFee(2000)).to.be.revertedWithCustomError(
+    it("should not update managing fee above BPS", async () => {
+      await expect(vault.updateFees(101, 100)).to.be.revertedWithCustomError(
         vault,
-        "InvalidManagerFee"
+        "InvalidManagingFee"
       );
     });
 
-    it("should update manager fee by manager", async () => {
-      await expect(vault.updateManagerFee(300))
-        .to.emit(vault, "ManagerFeeUpdated")
-        .withArgs(300);
+    it("should not update performance fee above BPS", async () => {
+      await expect(vault.updateFees(100, 10001)).to.be.revertedWithCustomError(
+        vault,
+        "InvalidPerformanceFee"
+      );
+    });
+
+    it("should update manager and performance fee by manager", async () => {
+      await expect(vault.updateFees(100, 300))
+        .to.emit(vault, "FeesUpdated")
+        .withArgs(100, 300);
     });
   });
 
@@ -369,12 +383,21 @@ describe("RangeProtocolVault", () => {
       const totalSupply = await vault.totalSupply();
       const vaultShares = await vault.balanceOf(manager.address);
 
-      await vault.burn(vaultShares);
+      const managingFee = await vault.managingFee();
+      const userBalance0 = amount0Current.mul(vaultShares).div(totalSupply);
+      const managingFee0 = userBalance0.mul(managingFee).div(10_000);
+
+      const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
+      const managingFee1 = userBalance1.mul(managingFee).div(10_000);
+
+      await expect(vault.burn(vaultShares))
+        .to.emit(vault, "ManagingFeeEarned")
+        .withArgs(managingFee0, managingFee1);
       expect(await token0.balanceOf(manager.address)).to.be.equal(
-        userBalance0Before.add(amount0Current.mul(vaultShares).div(totalSupply))
+        userBalance0Before.add(userBalance0).sub(managingFee0)
       );
       expect(await token1.balanceOf(manager.address)).to.be.equal(
-        userBalance1Before.add(amount1Current.mul(vaultShares).div(totalSupply))
+        userBalance1Before.add(userBalance1).sub(managingFee1)
       );
     });
   });
@@ -404,8 +427,8 @@ describe("RangeProtocolVault", () => {
     });
 
     it("should add liquidity by manager", async () => {
-      const amount0 = await token0.balanceOf(vault.address);
-      const amount1 = await token1.balanceOf(vault.address);
+      const { amount0Current, amount1Current } =
+        await vault.getUnderlyingBalances();
 
       // eslint-disable-next-line @typescript-eslint/naming-convention
       const MockLiquidityAmounts = await ethers.getContractFactory(
@@ -418,11 +441,13 @@ describe("RangeProtocolVault", () => {
         sqrtPriceX96,
         lowerTick,
         upperTick,
-        amount0,
-        amount1
+        amount0Current,
+        amount1Current
       );
 
-      await expect(vault.addLiquidity(lowerTick, upperTick, amount0, amount1))
+      await expect(
+        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
+      )
         .to.emit(vault, "LiquidityAdded")
         .withArgs(liquidity, lowerTick, upperTick, anyValue, anyValue)
         .to.emit(vault, "InThePositionStatusSet")
@@ -431,12 +456,7 @@ describe("RangeProtocolVault", () => {
   });
 
   describe("Fee collection", () => {
-    it("should manager and treasury collect fee", async () => {
-      expect(await vault.managerBalance0()).to.be.equal(0);
-      expect(await vault.managerBalance1()).to.be.equal(0);
-      expect(await vault.treasuryBalance0()).to.be.equal(0);
-      expect(await vault.treasuryBalance1()).to.be.equal(0);
-
+    it("should manager collect fee", async () => {
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
       await token1.transfer(vault.address, amount1);
@@ -445,56 +465,32 @@ describe("RangeProtocolVault", () => {
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())
-        .to.emit(vault, "FeesEarned")
+        .to.emit(vault, "PerformanceFeeEarned")
         .withArgs(fee0, fee1);
 
       const managerBalance0 = await vault.managerBalance0();
       const managerBalance1 = await vault.managerBalance1();
-      const treasuryBalance0 = await vault.treasuryBalance0();
-      const treasuryBalance1 = await vault.treasuryBalance1();
-
-      const totalFee = {
-        fee0: fee0.add(managerBalance0).add(treasuryBalance0),
-        fee1: fee1.add(managerBalance1).add(treasuryBalance1),
-      };
-      expect(managerBalance0).to.be.equal(
-        totalFee.fee0.mul(await vault.managerFee()).div(bn(10_000))
-      );
-      expect(managerBalance1).to.be.equal(
-        totalFee.fee1.mul(await vault.managerFee()).div(bn(10_000))
-      );
-      expect(treasuryBalance0).to.be.equal(
-        totalFee.fee0.mul(await vault.TREASURY_FEE_BPS()).div(bn(10_000))
-      );
-      expect(treasuryBalance1).to.be.equal(
-        totalFee.fee1.mul(await vault.TREASURY_FEE_BPS()).div(bn(10_000))
-      );
 
       const managerBalance0Before = await token0.balanceOf(manager.address);
       const managerBalance1Before = await token1.balanceOf(manager.address);
-      const treasuryBalance0Before = await token0.balanceOf(treasury.address);
-      const treasuryBalance1Before = await token1.balanceOf(treasury.address);
-
       await vault.connect(manager).collectManager();
-      await vault.connect(treasury).collectTreasury();
 
-      expect(await token0.balanceOf(manager.address)).to.be.gte(
-        managerBalance0Before
+      const performanceFee0 = fee0
+        .mul(await vault.performanceFee())
+        .div(10_000);
+      const performanceFee1 = fee0
+        .mul(await vault.performanceFee())
+        .div(10_000);
+
+      expect(await token0.balanceOf(manager.address)).to.be.equal(
+        managerBalance0Before.add(managerBalance0).add(performanceFee0)
       );
-      expect(await token1.balanceOf(manager.address)).to.be.gte(
-        managerBalance1Before
-      );
-      expect(await token0.balanceOf(treasury.address)).to.be.gte(
-        treasuryBalance0Before
-      );
-      expect(await token1.balanceOf(manager.address)).to.be.gte(
-        treasuryBalance1Before
+      expect(await token1.balanceOf(manager.address)).to.be.equal(
+        managerBalance1Before.add(managerBalance1).add(performanceFee1)
       );
 
       expect(await vault.managerBalance0()).to.be.equal(0);
       expect(await vault.managerBalance1()).to.be.equal(0);
-      expect(await vault.treasuryBalance0()).to.be.equal(0);
-      expect(await vault.treasuryBalance1()).to.be.equal(0);
     });
   });
 

@@ -6,14 +6,10 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
 contract SwapTest is IUniswapV3SwapCallback {
-    function swapZeroForOne(
-        address pool,
-        int256 amountSpecified
-    ) external {
+    function swapZeroForOne(address pool, int256 amountSpecified) external {
         (uint160 sqrtRatio, , , , , , ) = IUniswapV3Pool(pool).slot0();
-        uint160 nextSqrtRatio = sqrtRatio
-            + uint160(uint160(uint256(amountSpecified) * 2 ** 96)
-            / IUniswapV3Pool(pool).liquidity());
+        uint160 nextSqrtRatio = sqrtRatio +
+            uint160(uint160(uint256(amountSpecified) * 2 ** 96) / IUniswapV3Pool(pool).liquidity());
 
         IUniswapV3Pool(pool).swap(
             address(msg.sender),

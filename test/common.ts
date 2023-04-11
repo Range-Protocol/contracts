@@ -25,18 +25,14 @@ export const position = (
 };
 
 export const getInitializeData = (params: {
-  treasuryAddress: string;
   managerAddress: string;
-  managerFee: number;
   name: string;
   symbol: string;
 }): any =>
   ethers.utils.defaultAbiCoder.encode(
-    ["address", "address", "uint16", "string", "string"],
+    ["address", "string", "string"],
     [
-      params.treasuryAddress,
       params.managerAddress,
-      params.managerFee,
       params.name,
       params.symbol,
     ]

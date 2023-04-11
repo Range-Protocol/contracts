@@ -19,10 +19,8 @@ let univ3Pool: IUniswapV3Pool;
 let token0: IERC20;
 let token1: IERC20;
 let manager: SignerWithAddress;
-let treasury: SignerWithAddress;
 let nonManager: SignerWithAddress;
 let newManager: SignerWithAddress;
-const managerFee = 500;
 const poolFee = 10000;
 const name = "Test Token";
 const symbol = "TT";
@@ -30,7 +28,7 @@ let initializeData: any;
 
 describe("RangeProtocolFactory", () => {
   before(async function () {
-    [manager, nonManager, treasury, newManager] = await ethers.getSigners();
+    [manager, nonManager, newManager] = await ethers.getSigners();
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
@@ -69,9 +67,7 @@ describe("RangeProtocolFactory", () => {
     vaultImpl = (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 
     initializeData = getInitializeData({
-      treasuryAddress: treasury.address,
       managerAddress: manager.address,
-      managerFee,
       name,
       symbol,
     });

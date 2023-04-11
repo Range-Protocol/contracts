@@ -6,7 +6,8 @@ import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.so
 
 error MintNotStarted();
 error NotAllowedToUpdateTicks();
-error InvalidManagerFee();
+error InvalidManagingFee();
+error InvalidPerformanceFee();
 error OnlyPoolAllowed();
 error InvalidMintAmount();
 error InvalidBurnAmount();
@@ -15,7 +16,6 @@ error ZeroMintAmount();
 error ZeroUnderlyingBalance();
 error TicksOutOfRange();
 error InvalidTicksSpacing();
-error ZeroTreasuryAddress();
 error OnlyFactoryAllowed();
 
 interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback {
@@ -45,8 +45,9 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         uint256 amount0Out,
         uint256 amount1Out
     );
-    event FeesEarned(uint256 feesEarned0, uint256 feesEarned1);
-    event ManagerFeeUpdated(uint16 managerFee);
+    event PerformanceFeeEarned(uint256 feesEarned0, uint256 feesEarned1);
+    event ManagingFeeEarned(uint256 feesEarned0, uint256 feesEarned1);
+    event FeesUpdated(uint16 managingFee, uint16 performanceFee);
     event InThePositionStatusSet(bool inThePosition);
     event Swapped(bool zeroForOne, int256 amount0, int256 amount1);
     event TicksSet(int24 lowerTick, int24 upperTick);
@@ -77,9 +78,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
 
     function collectManager() external;
 
-    function collectTreasury() external;
-
-    function updateManagerFee(uint16 newManagerFee) external;
+    function updateFees(uint16 newManagingFee, uint16 newPerformanceFee) external;
 
     function getMintAmounts(
         uint256 amount0Max,
