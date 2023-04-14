@@ -18,7 +18,8 @@ The Range Protocol operates as follows:
 - At the times of high volatility, vault manager can remove liquidity from current tick range making all the vault liquidity inactive. The vault's status is changed to `out of the position` yet minting continues based on the `token0` and `token1` ratio in the pool and users are minted vault shares based on this ratio. If the total supply goes to zero while the pool is `out of the position` then minting is stopped since at that point there will be no reference ratio to mint vault shares based upon. The vault must update the ticks to start accepting liquidity into a newer tick range.
 - Vault manager can perform swap between `token0` and `token1` to convert assets to a specific ratio using `swap` function for providing liquidity to newer tick range through `addLiquidity` function. 
 - Part of collected fee from Uniswap V3 pool is provided to vault manager as performance fee and part of notional amount is deducted from redeeming user as managing fee.
-- Manager can update the manager fee which is maxed at 10%.
+- Vault manager can update the managing and performance fee managing fee is capped at 1% and performance fee is capped at 1%.
+- Vault manager can pause and unpause the mint and burn function of the vault contract.
 
 ### Fee Mechanism
 There are two types of fees i.e. performance fee and managing fee. Performance fee will be capped at 10% (1000 BPS) and at the time of vault initialisation, it will be set to 250 BPS (2.5%). The managing fee at the time of vault initialisation will be set to 0%, but it can be set up to 1% (100 BPS). Both of these fees are credited to state variables of `managerBalance0` and `managerBalance1`.

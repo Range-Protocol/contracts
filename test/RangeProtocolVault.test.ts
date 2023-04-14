@@ -8,6 +8,7 @@ import {
   IUniswapV3Pool,
   RangeProtocolVault,
   RangeProtocolFactory,
+  VaultImplementationMock,
 } from "../typechain";
 import {
   bn,
@@ -93,14 +94,10 @@ describe("RangeProtocolVault", () => {
       initializeData
     );
 
-    const vaultAddress = await factory.vaults(
-      token0.address,
-      token1.address,
-      poolFee
-    );
+    const vaultAddress = await factory.getVaultAddresses(0, 0);
     vault = (await ethers.getContractAt(
       "RangeProtocolVault",
-      vaultAddress
+      vaultAddress[0]
     )) as RangeProtocolVault;
   });
 
@@ -110,7 +107,10 @@ describe("RangeProtocolVault", () => {
   });
 
   it("should not mint when vault is not initialized", async () => {
-    await expect(vault.mint(amount0)).to.be.revertedWith("MintNotStarted");
+    await expect(vault.mint(amount0)).to.be.revertedWithCustomError(
+      vault,
+      "MintNotStarted"
+    );
   });
 
   it("non-manager should not be able to updateTicks", async () => {
@@ -160,6 +160,21 @@ describe("RangeProtocolVault", () => {
     );
   });
 
+  it("should not mint when contract is paused", async () => {
+    expect(await vault.paused()).to.be.equal(false);
+    await expect(vault.pause())
+      .to.emit(vault, "Paused")
+      .withArgs(manager.address);
+    expect(await vault.paused()).to.be.equal(true);
+
+    const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
+
+    await expect(vault.mint(mintAmount)).to.be.revertedWith("Pausable: paused");
+    await expect(vault.unpause())
+      .to.emit(vault, "Unpaused")
+      .withArgs(manager.address);
+  });
+
   it("should mint with zero totalSupply of vault shares", async () => {
     const {
       mintAmount,
@@ -168,6 +183,8 @@ describe("RangeProtocolVault", () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       amount1: _amount1,
     } = await vault.getMintAmounts(amount0, amount1);
+    // console.log(ethers.utils.formatEther(_amount0), ethers.utils.formatEther(_amount1))
+    // 1.999999999999999999 1.999999999999999999
 
     expect(await vault.totalSupply()).to.be.equal(0);
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
@@ -203,6 +220,8 @@ describe("RangeProtocolVault", () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       amount1: _amount1,
     } = await vault.getMintAmounts(amount0, amount1);
+    // console.log(ethers.utils.formatEther(_amount0), ethers.utils.formatEther(_amount1))
+    // 2.0 2.0
 
     const userVault0Before = (await vault.userVaults(manager.address)).token0;
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
@@ -242,7 +261,6 @@ describe("RangeProtocolVault", () => {
     const userBalance0Before = await token0.balanceOf(manager.address);
     const userBalance1Before = await token1.balanceOf(manager.address);
 
-    const balanceBefore = await vault.balanceOf(manager.address);
     const userVault0Before = (await vault.userVaults(manager.address)).token0;
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
     await vault.updateFees(50, 250);
@@ -273,20 +291,16 @@ describe("RangeProtocolVault", () => {
       userBalance1Before.add(amount1Got).sub(managingFee1)
     );
     expect((await vault.userVaults(manager.address)).token0).to.be.equal(
-      userVault0Before.mul(balanceBefore.sub(burnAmount)).div(balanceBefore)
+      userVault0Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
     );
     expect((await vault.userVaults(manager.address)).token1).to.be.equal(
-      userVault1Before.mul(balanceBefore.sub(burnAmount)).div(balanceBefore)
+      userVault1Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
     );
 
-    const userVault = (await vault.getUserVaults(0, 0))[0];
-    expect(userVault.user).to.be.equal(manager.address);
-    expect(userVault.token0).to.be.equal(
-      userVault0Before.mul(balanceBefore.sub(burnAmount)).div(balanceBefore)
-    );
-    expect(userVault.token1).to.be.equal(
-      userVault1Before.mul(balanceBefore.sub(burnAmount)).div(balanceBefore)
-    );
+    expect(await vault.managerBalance0()).to.be.equal(managingFee0);
+    expect(await vault.managerBalance1()).to.be.equal(managingFee1);
+    // console.log(ethers.utils.formatEther(managingFee0), ethers.utils.formatEther(managingFee1))
+    // 0.019999999999999999 0.019999999999999999
   });
 
   it("should not add liquidity when total supply is zero and vault is out of the pool", async () => {
@@ -362,14 +376,14 @@ describe("RangeProtocolVault", () => {
       expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
       expect(await vault.inThePosition()).to.be.equal(false);
       const { _liquidity: liquidityAfter } = await univ3Pool.positions(
-        position(vault.address, -60, 60)
+        position(vault.address, lowerTick, upperTick)
       );
       expect(liquidityAfter).to.be.equal(0);
     });
 
     it("should burn vault shares when liquidity is removed", async () => {
       const { _liquidity: liquidity } = await univ3Pool.positions(
-        position(vault.address, -60, 60)
+        position(vault.address, lowerTick, upperTick)
       );
       expect(liquidity).to.be.equal(0);
       await expect(vault.removeLiquidity())
@@ -382,6 +396,8 @@ describe("RangeProtocolVault", () => {
         await vault.getUnderlyingBalances();
       const totalSupply = await vault.totalSupply();
       const vaultShares = await vault.balanceOf(manager.address);
+      const managerBalance0Before = await vault.managerBalance0();
+      const managerBalance1Before = await vault.managerBalance1();
 
       const managingFee = await vault.managingFee();
       const userBalance0 = amount0Current.mul(vaultShares).div(totalSupply);
@@ -399,6 +415,15 @@ describe("RangeProtocolVault", () => {
       expect(await token1.balanceOf(manager.address)).to.be.equal(
         userBalance1Before.add(userBalance1).sub(managingFee1)
       );
+      expect(await vault.managerBalance0()).to.be.equal(
+        managerBalance0Before.add(managingFee0)
+      );
+      expect(await vault.managerBalance1()).to.be.equal(
+        managerBalance1Before.add(managingFee1)
+      );
+
+      // console.log(ethers.utils.formatEther(await vault.managerBalance0()), ethers.utils.formatEther(await vault.managerBalance1()))
+      // 0.089999999999999997 0.089999999999999997
     });
   });
 
@@ -526,32 +551,28 @@ describe("RangeProtocolVault", () => {
 
       const implSlot = await vaultImpl.proxiableUUID();
       expect(
-        ethers.utils.hexStripZeros(
-          await ethers.provider.getStorageAt(vault.address, implSlot)
-        )
-      ).to.be.equal(vaultImpl.address.toLowerCase());
-
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(vaultImpl.address.toLowerCase(), 32)
+      );
       await expect(factory.upgradeVault(vault.address, newVaultImpl.address))
         .to.emit(factory, "VaultImplUpgraded")
         .withArgs(vault.address, newVaultImpl.address);
 
       expect(
-        ethers.utils.hexStripZeros(
-          await ethers.provider.getStorageAt(vault.address, implSlot)
-        )
-      ).to.be.equal(newVaultImpl.address.toLowerCase());
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
+      );
 
       const newVaultImpl1 =
         (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 
       expect(
-        "0x" +
-          (await ethers.provider.getStorageAt(vault.address, implSlot)).slice(
-            26,
-            66
-          )
-      ).to.be.equal(newVaultImpl.address.toLowerCase());
-
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
+      );
       await expect(
         factory.upgradeVaults([vault.address], [newVaultImpl1.address])
       )
@@ -559,12 +580,12 @@ describe("RangeProtocolVault", () => {
         .withArgs(vault.address, newVaultImpl1.address);
 
       expect(
-        "0x" +
-          (await ethers.provider.getStorageAt(vault.address, implSlot)).slice(
-            26,
-            66
-          )
-      ).to.be.equal(newVaultImpl1.address.toLowerCase());
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl1.address.toLowerCase(), 32)
+      );
+
+      vaultImpl = newVaultImpl1;
     });
   });
 

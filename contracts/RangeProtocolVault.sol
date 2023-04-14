@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 import "./uniswap/TickMath.sol";
 import "./uniswap/LiquidityAmounts.sol";
@@ -38,6 +39,7 @@ contract RangeProtocolVault is
     ReentrancyGuardUpgradeable,
     Ownable,
     ERC20Upgradeable,
+    PausableUpgradeable,
     IRangeProtocolVault,
     RangeProtocolVaultStorage
 {
@@ -74,6 +76,7 @@ contract RangeProtocolVault is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __ERC20_init(_name, _symbol);
+        __Pausable_init();
 
         pool = IUniswapV3Pool(_pool);
         token0 = IERC20Upgradeable(pool.token0());
@@ -104,6 +107,21 @@ contract RangeProtocolVault is
             mintStarted = true;
             emit MintStarted();
         }
+    }
+
+    /**
+     * @notice allows pausing of minting and burning features of the contract in the event
+     * any security risk is seen in the vault.
+     */
+    function pause() external onlyManager {
+        _pause();
+    }
+
+    /**
+     * @notice allows unpausing of minting and burning features of the contract if they paused.
+     */
+    function unpause() external onlyManager {
+        _unpause();
     }
 
     /// @notice uniswapV3MintCallback Uniswap V3 callback fn, called back on pool.mint
@@ -147,7 +165,7 @@ contract RangeProtocolVault is
      */
     function mint(
         uint256 mintAmount
-    ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
+    ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (!mintStarted) revert MintNotStarted();
         if (mintAmount == 0) revert InvalidMintAmount();
         uint256 totalSupply = totalSupply();
@@ -213,7 +231,7 @@ contract RangeProtocolVault is
      */
     function burn(
         uint256 burnAmount
-    ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
+    ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert InvalidBurnAmount();
         uint256 totalSupply = totalSupply();
         uint256 balanceBefore = balanceOf(msg.sender);

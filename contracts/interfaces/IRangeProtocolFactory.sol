@@ -2,7 +2,6 @@
 pragma solidity 0.8.4;
 
 error ZeroPoolAddress();
-error VaultAlreadyExists();
 error NoVaultInitDataProvided();
 error MismatchedVaultsAndImplsLength();
 error VaultUpgradeFailed();

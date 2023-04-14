@@ -90,7 +90,7 @@ describe("RangeProtocolFactory", () => {
     ).to.be.revertedWith("ZeroPoolAddress()");
   });
 
-  it("should not deploy a vault both tokens being the same", async function () {
+  it("should not deploy a vault with both tokens being the same", async function () {
     await expect(
       factory.createVault(
         token0.address,
@@ -128,9 +128,14 @@ describe("RangeProtocolFactory", () => {
     )
       .to.emit(factory, "VaultCreated")
       .withArgs((univ3Pool as Contract).address, anyValue);
+
+    expect(await factory.vaultCount()).to.be.equal(1);
+    expect((await factory.getVaultAddresses(0, 0))[0]).to.not.be.equal(
+      ethers.constants.AddressZero
+    );
   });
 
-  it("should not redeploy a duplicate vault", async function () {
+  it("should allow deploying vault with duplicate pairs", async function () {
     await expect(
       factory.createVault(
         token0.address,
@@ -139,7 +144,46 @@ describe("RangeProtocolFactory", () => {
         vaultImpl.address,
         initializeData
       )
-    ).to.be.revertedWith("VaultAlreadyExists()");
+    )
+      .to.emit(factory, "VaultCreated")
+      .withArgs((univ3Pool as Contract).address, anyValue);
+
+    expect(await factory.vaultCount()).to.be.equal(2);
+    const vault0Address = (await factory.getVaultAddresses(0, 0))[0];
+    const vault1Address = (await factory.getVaultAddresses(0, 1))[1];
+
+    expect(vault0Address).to.not.be.equal(ethers.constants.AddressZero);
+    expect(vault1Address).to.not.be.equal(ethers.constants.AddressZero);
+
+    const dataABI = new ethers.utils.Interface([
+      "function token0() returns (address)",
+      "function token1() returns (address)",
+    ]);
+
+    expect(vault0Address).to.be.not.equal(vault1Address);
+    expect(
+      await ethers.provider.call({
+        to: vault0Address,
+        data: dataABI.encodeFunctionData("token0"),
+      })
+    ).to.be.equal(
+      await ethers.provider.call({
+        to: vault1Address,
+        data: dataABI.encodeFunctionData("token0"),
+      })
+    );
+
+    expect(
+      await ethers.provider.call({
+        to: vault0Address,
+        data: dataABI.encodeFunctionData("token1"),
+      })
+    ).to.be.equal(
+      await ethers.provider.call({
+        to: vault1Address,
+        data: dataABI.encodeFunctionData("token1"),
+      })
+    );
   });
 
   describe("transferOwnership", () => {

@@ -23,9 +23,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     address public immutable factory;
 
     /// @notice all deployed vault instances
-    address[] public allVaults;
-    // toke0, token1, fee -> RangeProtocol vault address
-    mapping(address => mapping(address => mapping(uint24 => address))) public vaults;
+    address[] private _vaultsList;
 
     constructor(address _uniswapV3Factory) {
         factory = _uniswapV3Factory;
@@ -80,6 +78,28 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     }
 
     /**
+     * @notice returns the vaults addresses based on the provided indexes
+     * @param startIdx the index in vaults to start retrieval from.
+     * @param endIdx the index in vaults to end retrieval from.
+     * @return vaultList list of fetched vault addresses
+     */
+    function getVaultAddresses(
+        uint256 startIdx,
+        uint256 endIdx
+    ) external view returns (address[] memory vaultList) {
+        vaultList = new address[](endIdx - startIdx + 1);
+        for (uint256 i = startIdx; i <= endIdx; i++) {
+            vaultList[i] = _vaultsList[i];
+        }
+    }
+
+    /// @notice vaultCount counts the total number of vaults in existence
+    /// @return total count of vaults
+    function vaultCount() public view returns (uint256) {
+        return _vaultsList.length;
+    }
+
+    /**
      * @dev Internal function to create vault proxy.
      */
     function _createVault(
@@ -93,20 +113,16 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         if (data.length == 0) revert NoVaultInitDataProvided();
         if (tokenA == tokenB) revert();
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-
-        if (token0 == address(0x0)) revert();
-        if (vaults[token0][token1][fee] != address(0)) revert VaultAlreadyExists();
+        if (token0 == address(0x0)) revert("token cannot be a zero address");
 
         int24 tickSpacing = IUniswapV3Factory(factory).feeAmountTickSpacing(fee);
         vault = address(
-            new ERC1967Proxy{salt: keccak256(abi.encodePacked(token0, token1, fee))}(
+            new ERC1967Proxy(
                 implementation,
                 abi.encodeWithSelector(INIT_SELECTOR, pool, tickSpacing, data)
             )
         );
-        vaults[token0][token1][fee] = vault;
-        vaults[token1][token0][fee] = vault;
-        allVaults.push(vault);
+        _vaultsList.push(vault);
     }
 
     /**

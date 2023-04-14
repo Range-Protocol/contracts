@@ -107,14 +107,10 @@ describe("RangeProtocolVault::exposure", () => {
       initializeData
     );
 
-    const vaultAddress = await factory.vaults(
-      token0.address,
-      token1.address,
-      poolFee
-    );
+    const vaultAddress = await factory.getVaultAddresses(0, 0);
     vault = (await ethers.getContractAt(
       "RangeProtocolVault",
-      vaultAddress
+      vaultAddress[0]
     )) as RangeProtocolVault;
 
     await expect(vault.connect(manager).updateTicks(lowerTick, upperTick));
