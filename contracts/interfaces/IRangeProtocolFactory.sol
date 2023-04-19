@@ -1,11 +1,6 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-error ZeroPoolAddress();
-error NoVaultInitDataProvided();
-error MismatchedVaultsAndImplsLength();
-error VaultUpgradeFailed();
-
 interface IRangeProtocolFactory {
     event VaultCreated(address indexed uniPool, address indexed vault);
     event VaultImplUpgraded(address indexed uniPool, address indexed vault);

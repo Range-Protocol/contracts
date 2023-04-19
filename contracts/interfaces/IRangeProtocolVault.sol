@@ -1,22 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
-import "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
-
-error MintNotStarted();
-error NotAllowedToUpdateTicks();
-error InvalidManagingFee();
-error InvalidPerformanceFee();
-error OnlyPoolAllowed();
-error InvalidMintAmount();
-error InvalidBurnAmount();
-error MintNotAllowed();
-error ZeroMintAmount();
-error ZeroUnderlyingBalance();
-error TicksOutOfRange();
-error InvalidTicksSpacing();
-error OnlyFactoryAllowed();
+import {IUniswapV3MintCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
+import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
 
 interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback {
     event Minted(
@@ -45,8 +31,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         uint256 amount0Out,
         uint256 amount1Out
     );
-    event PerformanceFeeEarned(uint256 feesEarned0, uint256 feesEarned1);
-    event ManagingFeeEarned(uint256 feesEarned0, uint256 feesEarned1);
+    event FeesEarned(uint256 feesEarned0, uint256 feesEarned1);
     event FeesUpdated(uint16 managingFee, uint16 performanceFee);
     event InThePositionStatusSet(bool inThePosition);
     event Swapped(bool zeroForOne, int256 amount0, int256 amount1);

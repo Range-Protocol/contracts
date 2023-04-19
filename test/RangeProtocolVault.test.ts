@@ -8,7 +8,6 @@ import {
   IUniswapV3Pool,
   RangeProtocolVault,
   RangeProtocolFactory,
-  VaultImplementationMock,
 } from "../typechain";
 import {
   bn,
@@ -273,10 +272,11 @@ describe("RangeProtocolVault", () => {
 
     const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
     const managingFee1 = userBalance1.mul(managingFee).div(10_000);
+    const { fee0, fee1 } = await vault.getCurrentFees();
 
     await expect(vault.burn(burnAmount))
-      .to.emit(vault, "ManagingFeeEarned")
-      .withArgs(managingFee0, managingFee1);
+      .to.emit(vault, "FeesEarned")
+      .withArgs(fee0, fee1);
     expect(await vault.totalSupply()).to.be.equal(
       totalSupplyBefore.sub(burnAmount)
     );
@@ -369,9 +369,12 @@ describe("RangeProtocolVault", () => {
       );
       expect(liquidityBefore).not.to.be.equal(0);
 
+      const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.removeLiquidity())
-        .to.be.emit(vault, "InThePositionStatusSet")
-        .withArgs(false);
+        .to.emit(vault, "InThePositionStatusSet")
+        .withArgs(false)
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
 
       expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
       expect(await vault.inThePosition()).to.be.equal(false);
@@ -385,10 +388,12 @@ describe("RangeProtocolVault", () => {
       const { _liquidity: liquidity } = await univ3Pool.positions(
         position(vault.address, lowerTick, upperTick)
       );
+
       expect(liquidity).to.be.equal(0);
       await expect(vault.removeLiquidity())
         .to.be.emit(vault, "InThePositionStatusSet")
-        .withArgs(false);
+        .withArgs(false)
+        .not.to.emit(vault, "FeesEarned");
 
       const userBalance0Before = await token0.balanceOf(manager.address);
       const userBalance1Before = await token1.balanceOf(manager.address);
@@ -406,9 +411,7 @@ describe("RangeProtocolVault", () => {
       const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
       const managingFee1 = userBalance1.mul(managingFee).div(10_000);
 
-      await expect(vault.burn(vaultShares))
-        .to.emit(vault, "ManagingFeeEarned")
-        .withArgs(managingFee0, managingFee1);
+      await expect(vault.burn(vaultShares)).not.to.emit(vault, "FeesEarned");
       expect(await token0.balanceOf(manager.address)).to.be.equal(
         userBalance0Before.add(userBalance0).sub(managingFee0)
       );
@@ -481,6 +484,23 @@ describe("RangeProtocolVault", () => {
   });
 
   describe("Fee collection", () => {
+    it("non-manager should not collect fee", async () => {
+      const { sqrtPriceX96 } = await univ3Pool.slot0();
+      const liquidity = await univ3Pool.liquidity();
+      await token1.transfer(vault.address, amount1);
+      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
+      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+
+      const { fee0, fee1 } = await vault.getCurrentFees();
+      await expect(vault.pullFeeFromPool())
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
+
+      await expect(
+        vault.connect(nonManager).collectManager()
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
     it("should manager collect fee", async () => {
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
@@ -490,7 +510,7 @@ describe("RangeProtocolVault", () => {
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())
-        .to.emit(vault, "PerformanceFeeEarned")
+        .to.emit(vault, "FeesEarned")
         .withArgs(fee0, fee1);
 
       const managerBalance0 = await vault.managerBalance0();
@@ -532,13 +552,13 @@ describe("RangeProtocolVault", () => {
         factory
           .connect(nonManager)
           .upgradeVault(vault.address, newVaultImpl.address)
-      ).to.be.revertedWith("Ownable: caller is not the manager");
+      ).to.be.revertedWith("Ownable: caller is not the owner");
 
       await expect(
         factory
           .connect(nonManager)
           .upgradeVaults([vault.address], [newVaultImpl.address])
-      ).to.be.revertedWith("Ownable: caller is not the manager");
+      ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("should upgrade range vault implementation by factory manager", async () => {

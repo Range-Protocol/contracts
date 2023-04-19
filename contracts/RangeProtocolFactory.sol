@@ -1,17 +1,18 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
-import "./abstract/Ownable.sol";
-import "./interfaces/IRangeProtocolFactory.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3PoolImmutables} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
+import {IRangeProtocolFactory} from "./interfaces/IRangeProtocolFactory.sol";
+import {FactoryErrors} from "./errors/FactoryErrors.sol";
 
 /**
  * @dev Mars@RangeProtocol
  * @notice RangeProtocolFactory deploys and upgrades proxies for Range Protocol vault contracts.
- * Manager can deploy and upgrade vault contracts.
+ * Owner can deploy and upgrade vault contracts.
  */
 contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     bytes4 public constant INIT_SELECTOR =
@@ -25,9 +26,8 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     /// @notice all deployed vault instances
     address[] private _vaultsList;
 
-    constructor(address _uniswapV3Factory) {
+    constructor(address _uniswapV3Factory) Ownable() {
         factory = _uniswapV3Factory;
-        _manager = msg.sender;
     }
 
     // @notice createVault creates a ERC1967 proxy instance for the given implementation of vault contract
@@ -42,9 +42,9 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         uint24 fee,
         address implementation,
         bytes memory data
-    ) external override onlyManager {
+    ) external override onlyOwner {
         address pool = IUniswapV3Factory(factory).getPool(tokenA, tokenB, fee);
-        if (pool == address(0x0)) revert ZeroPoolAddress();
+        if (pool == address(0x0)) revert FactoryErrors.ZeroPoolAddress();
         address vault = _createVault(tokenA, tokenB, fee, pool, implementation, data);
 
         emit VaultCreated(pool, vault);
@@ -52,15 +52,15 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
 
     /**
      * @notice upgradeVaults it allows upgrading the implementation contracts for deployed vault proxies.
-     * only manager of the factory contract can call it. Internally calls _upgradeVault.
+     * only owner of the factory contract can call it. Internally calls _upgradeVault.
      * @param _vaults list of vaults to upgrade
      * @param _impls new implementation contracts of corresponding vaults
      */
     function upgradeVaults(
         address[] calldata _vaults,
         address[] calldata _impls
-    ) external override onlyManager {
-        if (_vaults.length != _impls.length) revert MismatchedVaultsAndImplsLength();
+    ) external override onlyOwner {
+        if (_vaults.length != _impls.length) revert FactoryErrors.MismatchedVaultsAndImplsLength();
 
         for (uint256 i = 0; i < _vaults.length; i++) {
             _upgradeVault(_vaults[i], _impls[i]);
@@ -69,11 +69,11 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
 
     /**
      * @notice upgradeVault it allows upgrading the implementation contract for deployed vault proxy.
-     * only manager of the factory contract can call it. Internally calls _upgradeVault.
+     * only owner of the factory contract can call it. Internally calls _upgradeVault.
      * @param _vault a vault to upgrade
      * @param _impl new implementation contract of corresponding vault
      */
-    function upgradeVault(address _vault, address _impl) public override onlyManager {
+    function upgradeVault(address _vault, address _impl) public override onlyOwner {
         _upgradeVault(_vault, _impl);
     }
 
@@ -110,9 +110,9 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         address implementation,
         bytes memory data
     ) internal returns (address vault) {
-        if (data.length == 0) revert NoVaultInitDataProvided();
+        if (data.length == 0) revert FactoryErrors.NoVaultInitDataProvided();
         if (tokenA == tokenB) revert();
-        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        address token0 = tokenA < tokenB ? tokenA : tokenB;
         if (token0 == address(0x0)) revert("token cannot be a zero address");
 
         int24 tickSpacing = IUniswapV3Factory(factory).feeAmountTickSpacing(fee);
@@ -131,7 +131,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     function _upgradeVault(address _vault, address _impl) internal {
         (bool success, ) = _vault.call(abi.encodeWithSelector(UPGRADE_SELECTOR, _impl));
 
-        if (!success) revert VaultUpgradeFailed();
+        if (!success) revert FactoryErrors.VaultUpgradeFailed();
         emit VaultImplUpgraded(_vault, _impl);
     }
 }

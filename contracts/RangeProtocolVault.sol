@@ -1,19 +1,23 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {SafeCastUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/math/SafeCastUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
-import "./uniswap/TickMath.sol";
-import "./uniswap/LiquidityAmounts.sol";
-import "./interfaces/IRangeProtocolVault.sol";
-import "./RangeProtocolVaultStorage.sol";
-import "./abstract/Ownable.sol";
+import {TickMath} from "./uniswap/TickMath.sol";
+import {LiquidityAmounts} from "./uniswap/LiquidityAmounts.sol";
+import {FullMath} from "./uniswap/FullMath.sol";
+import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
+import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
+import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
+import {VaultErrors} from "./errors/VaultErrors.sol";
 
 /**
  * @dev Mars@RangeProtocol
@@ -37,7 +41,7 @@ contract RangeProtocolVault is
     Initializable,
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
-    Ownable,
+    OwnableUpgradeable,
     ERC20Upgradeable,
     PausableUpgradeable,
     IRangeProtocolVault,
@@ -75,8 +79,11 @@ contract RangeProtocolVault is
 
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
+        __Ownable_init();
         __ERC20_init(_name, _symbol);
         __Pausable_init();
+
+        _transferOwnership(manager);
 
         pool = IUniswapV3Pool(_pool);
         token0 = IERC20Upgradeable(pool.token0());
@@ -86,8 +93,6 @@ contract RangeProtocolVault is
 
         performanceFee = 250;
         managingFee = 0;
-        _manager = manager;
-
         // Managing fee is 0% at the time vault initialization.
         emit FeesUpdated(0, performanceFee);
     }
@@ -100,7 +105,7 @@ contract RangeProtocolVault is
      * @param _upperTick upperTick to set
      */
     function updateTicks(int24 _lowerTick, int24 _upperTick) external override onlyManager {
-        if (totalSupply() != 0 || inThePosition) revert NotAllowedToUpdateTicks();
+        if (totalSupply() != 0 || inThePosition) revert VaultErrors.NotAllowedToUpdateTicks();
         _updateTicks(_lowerTick, _upperTick);
 
         if (!mintStarted) {
@@ -130,7 +135,7 @@ contract RangeProtocolVault is
         uint256 amount1Owed,
         bytes calldata
     ) external override {
-        if (msg.sender != address(pool)) revert OnlyPoolAllowed();
+        if (msg.sender != address(pool)) revert VaultErrors.OnlyPoolAllowed();
 
         if (amount0Owed > 0) {
             token0.safeTransfer(msg.sender, amount0Owed);
@@ -147,7 +152,7 @@ contract RangeProtocolVault is
         int256 amount1Delta,
         bytes calldata
     ) external override {
-        if (msg.sender != address(pool)) revert OnlyPoolAllowed();
+        if (msg.sender != address(pool)) revert VaultErrors.OnlyPoolAllowed();
 
         if (amount0Delta > 0) {
             token0.safeTransfer(msg.sender, uint256(amount0Delta));
@@ -166,8 +171,8 @@ contract RangeProtocolVault is
     function mint(
         uint256 mintAmount
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
-        if (!mintStarted) revert MintNotStarted();
-        if (mintAmount == 0) revert InvalidMintAmount();
+        if (!mintStarted) revert VaultErrors.MintNotStarted();
+        if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
         uint256 totalSupply = totalSupply();
         bool _inThePosition = inThePosition;
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -192,7 +197,7 @@ contract RangeProtocolVault is
             // This branch will be executed if all users remove their liquidity from the vault i.e. total supply is zero from non-zero and
             // the vault is out of the position i.e. no valid tick range to calculate the vault's mint shares.
             // Manager must call initialize function with valid tick ranges to enable the minting again.
-            revert MintNotAllowed();
+            revert VaultErrors.MintNotAllowed();
         }
 
         if (!userVaults[msg.sender].exists) {
@@ -232,7 +237,7 @@ contract RangeProtocolVault is
     function burn(
         uint256 burnAmount
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
-        if (burnAmount == 0) revert InvalidBurnAmount();
+        if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
         uint256 totalSupply = totalSupply();
         uint256 balanceBefore = balanceOf(msg.sender);
         _burn(msg.sender, burnAmount);
@@ -245,7 +250,7 @@ contract RangeProtocolVault is
 
             _applyPerformanceFee(fee0, fee1);
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-            emit PerformanceFeeEarned(fee0, fee1);
+            emit FeesEarned(fee0, fee1);
             amount0 =
                 burn0 +
                 FullMath.mulDiv(
@@ -269,7 +274,6 @@ contract RangeProtocolVault is
 
         _applyManagingFee(amount0, amount1);
         (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
-        emit ManagingFeeEarned(amount0 - amount0AfterFee, amount1 - amount1AfterFee);
         if (amount0 > 0) {
             userVaults[msg.sender].token0 =
                 (userVaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
@@ -302,7 +306,7 @@ contract RangeProtocolVault is
 
             _applyPerformanceFee(fee0, fee1);
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-            emit PerformanceFeeEarned(fee0, fee1);
+            emit FeesEarned(fee0, fee1);
         }
 
         // TicksSet event is not emitted here since the emitting would create a new position on subgraph but
@@ -409,21 +413,21 @@ contract RangeProtocolVault is
         (, , uint256 fee0, uint256 fee1) = _withdraw(0);
         _applyPerformanceFee(fee0, fee1);
         (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        emit PerformanceFeeEarned(fee0, fee1);
+        emit FeesEarned(fee0, fee1);
     }
 
     /// @notice collectManager collects manager fees accrued
-    function collectManager() external override {
+    function collectManager() external override onlyManager {
         uint256 amount0 = managerBalance0;
         uint256 amount1 = managerBalance1;
         managerBalance0 = 0;
         managerBalance1 = 0;
 
         if (amount0 > 0) {
-            token0.safeTransfer(_manager, amount0);
+            token0.safeTransfer(manager(), amount0);
         }
         if (amount1 > 0) {
-            token1.safeTransfer(_manager, amount1);
+            token1.safeTransfer(manager(), amount1);
         }
     }
 
@@ -434,17 +438,11 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert InvalidManagingFee();
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert InvalidPerformanceFee();
+        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
+        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
 
-        if (newManagingFee >= 0) {
-            managingFee = newManagingFee;
-        }
-
-        if (newPerformanceFee >= 0) {
-            performanceFee = newPerformanceFee;
-        }
-
+        managingFee = newManagingFee;
+        performanceFee = newPerformanceFee;
         emit FeesUpdated(newManagingFee, newPerformanceFee);
     }
 
@@ -460,7 +458,7 @@ contract RangeProtocolVault is
         uint256 amount0Max,
         uint256 amount1Max
     ) external view override returns (uint256 amount0, uint256 amount1, uint256 mintAmount) {
-        if (!mintStarted) revert MintNotStarted();
+        if (!mintStarted) revert VaultErrors.MintNotStarted();
         uint256 totalSupply = totalSupply();
         if (totalSupply > 0) {
             (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
@@ -609,7 +607,7 @@ contract RangeProtocolVault is
      * the contract.
      */
     function _authorizeUpgrade(address) internal override {
-        if (msg.sender != factory) revert OnlyFactoryAllowed();
+        if (msg.sender != factory) revert VaultErrors.OnlyFactoryAllowed();
     }
 
     /**
@@ -647,11 +645,11 @@ contract RangeProtocolVault is
         } else if (amount1Current == 0 && amount0Current > 0) {
             mintAmount = FullMath.mulDiv(amount0Max, totalSupply, amount0Current);
         } else if (amount0Current == 0 && amount1Current == 0) {
-            revert ZeroUnderlyingBalance();
+            revert VaultErrors.ZeroUnderlyingBalance();
         } else {
             uint256 amount0Mint = FullMath.mulDiv(amount0Max, totalSupply, amount0Current);
             uint256 amount1Mint = FullMath.mulDiv(amount1Max, totalSupply, amount1Current);
-            if (amount0Mint == 0 || amount1Mint == 0) revert ZeroMintAmount();
+            if (amount0Mint == 0 || amount1Mint == 0) revert VaultErrors.ZeroMintAmount();
             mintAmount = amount0Mint < amount1Mint ? amount0Mint : amount1Mint;
         }
 
@@ -788,12 +786,12 @@ contract RangeProtocolVault is
      */
     function _validateTicks(int24 _lowerTick, int24 _upperTick) private view {
         if (_lowerTick < TickMath.MIN_TICK || _upperTick > TickMath.MAX_TICK)
-            revert TicksOutOfRange();
+            revert VaultErrors.TicksOutOfRange();
 
         if (
             _lowerTick >= _upperTick ||
             _lowerTick % tickSpacing != 0 ||
             _upperTick % tickSpacing != 0
-        ) revert InvalidTicksSpacing();
+        ) revert VaultErrors.InvalidTicksSpacing();
     }
 }

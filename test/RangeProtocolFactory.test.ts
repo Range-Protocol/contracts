@@ -18,9 +18,9 @@ let uniV3Factory: IUniswapV3Factory;
 let univ3Pool: IUniswapV3Pool;
 let token0: IERC20;
 let token1: IERC20;
-let manager: SignerWithAddress;
-let nonManager: SignerWithAddress;
-let newManager: SignerWithAddress;
+let owner: SignerWithAddress;
+let nonOwner: SignerWithAddress;
+let newOwner: SignerWithAddress;
 const poolFee = 10000;
 const name = "Test Token";
 const symbol = "TT";
@@ -28,7 +28,7 @@ let initializeData: any;
 
 describe("RangeProtocolFactory", () => {
   before(async function () {
-    [manager, nonManager, newManager] = await ethers.getSigners();
+    [owner, nonOwner, newOwner] = await ethers.getSigners();
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const UniswapV3Factory = await ethers.getContractFactory(
       "UniswapV3Factory"
@@ -67,7 +67,7 @@ describe("RangeProtocolFactory", () => {
     vaultImpl = (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 
     initializeData = getInitializeData({
-      managerAddress: manager.address,
+      managerAddress: owner.address,
       name,
       symbol,
     });
@@ -75,7 +75,7 @@ describe("RangeProtocolFactory", () => {
 
   it("should deploy RangeProtocolFactory", async function () {
     expect(await factory.factory()).to.be.equal(uniV3Factory.address);
-    expect(await factory.manager()).to.be.equal(manager.address);
+    expect(await factory.owner()).to.be.equal(owner.address);
   });
 
   it("should not deploy a vault with one of the tokens being zero", async function () {
@@ -102,10 +102,10 @@ describe("RangeProtocolFactory", () => {
     ).to.be.revertedWith("ZeroPoolAddress()");
   });
 
-  it("non-manager should not be able to deploy vault", async function () {
+  it("non-owner should not be able to deploy vault", async function () {
     await expect(
       factory
-        .connect(nonManager)
+        .connect(nonOwner)
         .createVault(
           token0.address,
           token1.address,
@@ -113,10 +113,10 @@ describe("RangeProtocolFactory", () => {
           vaultImpl.address,
           initializeData
         )
-    ).to.be.revertedWith("Ownable: caller is not the manager");
+    ).to.be.revertedWith("Ownable: caller is not the owner");
   });
 
-  it("manager should be able to deploy vault", async function () {
+  it("owner should be able to deploy vault", async function () {
     await expect(
       factory.createVault(
         token0.address,
@@ -187,20 +187,20 @@ describe("RangeProtocolFactory", () => {
   });
 
   describe("transferOwnership", () => {
-    it("should not be able to transferOwnership by non manager", async () => {
+    it("should not be able to transferOwnership by non owner", async () => {
       await expect(
-        factory.connect(nonManager).transferOwnership(newManager.address)
-      ).to.be.revertedWith("Ownable: caller is not the manager");
+        factory.connect(nonOwner).transferOwnership(newOwner.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
-    it("should be able to transferOwnership by manager", async () => {
-      await expect(factory.transferOwnership(newManager.address))
+    it("should be able to transferOwnership by owner", async () => {
+      await expect(factory.transferOwnership(newOwner.address))
         .to.emit(factory, "OwnershipTransferred")
-        .withArgs(manager.address, newManager.address);
-      expect(await factory.manager()).to.be.equal(newManager.address);
+        .withArgs(owner.address, newOwner.address);
+      expect(await factory.owner()).to.be.equal(newOwner.address);
 
-      await factory.connect(newManager).transferOwnership(manager.address);
-      expect(await factory.manager()).to.be.equal(manager.address);
+      await factory.connect(newOwner).transferOwnership(owner.address);
+      expect(await factory.owner()).to.be.equal(owner.address);
     });
   });
 });

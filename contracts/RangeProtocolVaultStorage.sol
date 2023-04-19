@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 /**
  * @notice RangeProtocolVaultStorage a storage contract for RangeProtocolVault
@@ -10,25 +10,19 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 abstract contract RangeProtocolVaultStorage {
     int24 public lowerTick;
     int24 public upperTick;
-
-    uint16 public managingFee;
-    uint256 public managerBalance0;
-    uint256 public managerBalance1;
-
-    IUniswapV3Pool public pool;
-    IERC20Upgradeable public token0;
-    IERC20Upgradeable public token1;
-    int24 public tickSpacing;
-
-    /// @notice Unused slots
-    address public unusedSlot0;
-    uint256 public unusedSlot1;
-    uint256 public unusedSlot2;
-
     bool public inThePosition;
     bool public mintStarted;
 
+    int24 public tickSpacing;
+    IUniswapV3Pool public pool;
+    IERC20Upgradeable public token0;
+    IERC20Upgradeable public token1;
+
     address public factory;
+    uint16 public managingFee;
+    uint16 public performanceFee;
+    uint256 public managerBalance0;
+    uint256 public managerBalance1;
 
     struct UserVault {
         bool exists;
@@ -37,7 +31,5 @@ abstract contract RangeProtocolVaultStorage {
     }
     mapping(address => UserVault) public userVaults;
     address[] public users;
-
-    uint16 public performanceFee;
     // NOTE: Only add more state variable below it and do not change the order of above state variables.
 }
