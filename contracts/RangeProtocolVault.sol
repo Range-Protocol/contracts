@@ -9,11 +9,11 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/se
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 
-import {TickMath} from "./uniswap/TickMath.sol";
-import {LiquidityAmounts} from "./uniswap/LiquidityAmounts.sol";
-import {FullMath} from "./uniswap/FullMath.sol";
+import {TickMath} from "./pancake/TickMath.sol";
+import {LiquidityAmounts} from "./pancake/LiquidityAmounts.sol";
+import {FullMath} from "./pancake/FullMath.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
 import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
@@ -21,20 +21,20 @@ import {VaultErrors} from "./errors/VaultErrors.sol";
 
 /**
  * @dev Mars@RangeProtocol
- * @notice RangeProtocolVault is fungible vault shares contract that accepts uniswap pool tokens for liquidity
- * provision to the corresponding uniswap v3 pool. This contract is configurable to work with any uniswap v3
+ * @notice RangeProtocolVault is fungible vault shares contract that accepts pancake pool tokens for liquidity
+ * provision to the corresponding pancake v3 pool. This contract is configurable to work with any pancake v3
  * pool and is initialized through RangeProtocolFactory contract's createVault function which determines
  * the pool address based provided tokens addresses and fee tier.
  *
  * The contract allows minting and burning of vault shares where minting involves providing token0 and/or token1
  * for the current set ticks (or based on ratio of token0 and token1 amounts in the vault when vault does not have an
- * active position in the uniswap v3 pool) and burning involves removing liquidity from the uniswap v3 pool along with
+ * active position in the pancake v3 pool) and burning involves removing liquidity from the pancake v3 pool along with
  * the vault's fee.
  *
- * The manager of the contract can remove liquidity from uniswap v3 pool and deposit into a newer take range to maximise
+ * The manager of the contract can remove liquidity from pancake v3 pool and deposit into a newer take range to maximise
  * the profit by keeping liquidity out of the pool under high volatility periods.
  *
- * Part of the fee earned from uniswap v3 position is paid to manager as performance fee and fee is charged on the LP's
+ * Part of the fee earned from pancake v3 position is paid to manager as performance fee and fee is charged on the LP's
  * notional amount as managing fee.
  */
 contract RangeProtocolVault is
@@ -50,7 +50,7 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from uniswap v3 pool.
+    /// Performance fee cannot be set more than 10% of the fee earned from pancake v3 pool.
     uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
     uint16 public constant MAX_MANAGING_FEE_BPS = 100;
@@ -62,8 +62,8 @@ contract RangeProtocolVault is
     /**
      * @notice initialize initializes the vault contract and is called right after proxy deployment
      * by the factory contract.
-     * @param _pool address of the uniswap v3 pool associated with vault
-     * @param _tickSpacing tick spacing of the uniswap pool
+     * @param _pool address of the pancake v3 pool associated with vault
+     * @param _tickSpacing tick spacing of the pancake pool
      * @param data additional config data associated with the implementation. The data type chosen is bytes
      * to keep the initialize function implementation contract generic to be compatible with factory contract
      */
@@ -85,7 +85,7 @@ contract RangeProtocolVault is
 
         _transferOwnership(manager);
 
-        pool = IUniswapV3Pool(_pool);
+        pool = IPancakeV3Pool(_pool);
         token0 = IERC20Upgradeable(pool.token0());
         token1 = IERC20Upgradeable(pool.token1());
         tickSpacing = _tickSpacing;
@@ -100,7 +100,7 @@ contract RangeProtocolVault is
     /**
      * @notice updateTicks it is called by the contract manager to update the ticks.
      * It can only be called once total supply is zero and the vault has not active position
-     * in the uniswap pool
+     * in the pancake pool
      * @param _lowerTick lowerTick to set
      * @param _upperTick upperTick to set
      */
@@ -129,8 +129,8 @@ contract RangeProtocolVault is
         _unpause();
     }
 
-    /// @notice uniswapV3MintCallback Uniswap V3 callback fn, called back on pool.mint
-    function uniswapV3MintCallback(
+    /// @notice pancakeV3MintCallback Pancake V3 callback fn, called back on pool.mint
+    function pancakeV3MintCallback(
         uint256 amount0Owed,
         uint256 amount1Owed,
         bytes calldata
@@ -146,8 +146,8 @@ contract RangeProtocolVault is
         }
     }
 
-    /// @notice uniswapV3SwapCallback Uniswap v3 callback fn, called back on pool.swap
-    function uniswapV3SwapCallback(
+    /// @notice pancakeV3SwapCallback Pancake v3 callback fn, called back on pool.swap
+    function pancakeV3SwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
         bytes calldata
@@ -162,7 +162,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice mint mints range vault shares, fractional shares of a Uniswap V3 position/strategy
+     * @notice mint mints range vault shares, fractional shares of a Pancake V3 position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
@@ -229,7 +229,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice burn burns range vault shares (shares of a Uniswap V3 position) and receive underlying
+     * @notice burn burns range vault shares (shares of a Pancake V3 position) and receive underlying
      * @param burnAmount The number of shares to burn
      * @return amount0 amount of token0 transferred to msg.sender for burning {burnAmount}
      * @return amount1 amount of token1 transferred to msg.sender for burning {burnAmount}
@@ -291,7 +291,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice removeLiquidity removes liquidity from uniswap pool and receives underlying tokens
+     * @notice removeLiquidity removes liquidity from pancake pool and receives underlying tokens
      * in the vault contract.
      */
     function removeLiquidity() external override onlyManager {
@@ -349,7 +349,7 @@ contract RangeProtocolVault is
 
     /**
      * @dev Mars@RangeProtocol
-     * @notice addLiquidity allows manager to add liquidity into uniswap pool into newer tick ranges.
+     * @notice addLiquidity allows manager to add liquidity into pancake pool into newer tick ranges.
      * @param newLowerTick new lower tick to deposit liquidity into
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
@@ -406,7 +406,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @dev pullFeeFromPool pulls accrued fee from uniswap v3 pool that position has accrued since
+     * @dev pullFeeFromPool pulls accrued fee from pancake v3 pool that position has accrued since
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
@@ -483,7 +483,7 @@ contract RangeProtocolVault is
 
     /**
      * @notice compute total underlying token0 and token1 token supply at provided price
-     * includes current liquidity invested in uniswap position, current fees earned
+     * includes current liquidity invested in pancake position, current fees earned
      * and any uninvested leftover (but does not include manager fees accrued)
      * @param sqrtRatioX96 price to computer underlying balances at
      * @return amount0Current current total underlying balance of token0
@@ -541,8 +541,8 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice getPositionID returns the position id of the vault in uniswap pool
-     * @return positionID position id of the vault in uniswap pool
+     * @notice getPositionID returns the position id of the vault in pancake pool
+     * @return positionID position id of the vault in pancake pool
      */
     function getPositionID() public view override returns (bytes32 positionID) {
         return keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
@@ -550,7 +550,7 @@ contract RangeProtocolVault is
 
     /**
      * @notice compute total underlying token0 and token1 token supply at current price
-     * includes current liquidity invested in uniswap position, current fees earned
+     * includes current liquidity invested in pancake position, current fees earned
      * and any uninvested leftover (but does not include manager fees accrued)
      * @return amount0Current current total underlying balance of token0
      * @return amount1Current current total underlying balance of token1
@@ -611,8 +611,8 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _withdraw internal function to withdraw liquidity from uniswap pool
-     * @param liquidity liquidity to remove from the uniswap pool
+     * @notice _withdraw internal function to withdraw liquidity from pancake pool
+     * @param liquidity liquidity to remove from the pancake pool
      */
     function _withdraw(
         uint128 liquidity
@@ -660,7 +660,7 @@ contract RangeProtocolVault is
     /**
      * @notice _feesEarned internal function to return the fees accrued
      * @param isZero true to compute fee for token0 and false to compute fee for token1
-     * @param feeGrowthInsideLast last time the fee was realized for the vault in uniswap pool
+     * @param feeGrowthInsideLast last time the fee was realized for the vault in pancake pool
      */
     function _feesEarned(
         bool isZero,
@@ -717,7 +717,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _applyPerformanceFee applies the performance fee to the fees earned from uniswap v3 pool.
+     * @notice _applyPerformanceFee applies the performance fee to the fees earned from pancake v3 pool.
      * @param fee0 fee earned in token0
      * @param fee1 fee earned in token1
      */
@@ -746,9 +746,9 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _netPerformanceFees computes the fee share for manager as performance fee from the fee earned from uniswap v3 pool.
-     * @param rawFee0 fee earned in token0 from uniswap v3 pool.
-     * @param rawFee1 fee earned in token1 from uniswap v3 pool.
+     * @notice _netPerformanceFees computes the fee share for manager as performance fee from the fee earned from pancake v3 pool.
+     * @param rawFee0 fee earned in token0 from pancake v3 pool.
+     * @param rawFee1 fee earned in token1 from pancake v3 pool.
      * @return fee0AfterDeduction fee in token0 earned after deducting performance fee from earned fee.
      * @return fee1AfterDeduction fee in token1 earned after deducting performance fee from earned fee.
      */

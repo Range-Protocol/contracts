@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
-import "../uniswap/LiquidityAmounts.sol";
+import "../pancake/LiquidityAmounts.sol";
 
 contract MockLiquidityAmounts {
     function getLiquidityForAmount0(

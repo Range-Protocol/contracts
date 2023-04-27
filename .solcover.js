@@ -2,7 +2,7 @@ module.exports = {
   skipFiles: [
     "__mocks__",
     "interfaces",
-    "uniswap",
+    "pancake",
     "node_modules",
   ],
 };

@@ -1,10 +1,10 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import {IUniswapV3MintCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
-import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
+import {IPancakeV3MintCallback} from "../pancake/interfaces/callback/IPancakeV3MintCallback.sol";
+import {IPancakeV3SwapCallback} from "../pancake/interfaces/callback/IPancakeV3SwapCallback.sol";
 
-interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback {
+interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback {
     event Minted(
         address indexed receiver,
         uint256 mintAmount,

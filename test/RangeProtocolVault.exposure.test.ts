@@ -1,11 +1,10 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {
   IERC20,
-  IUniswapV3Factory,
-  IUniswapV3Pool,
+  IPancakeV3Factory,
+  IPancakeV3Pool,
   RangeProtocolVault,
   RangeProtocolFactory,
   SwapTest,
@@ -15,7 +14,6 @@ import {
   encodePriceSqrt,
   getInitializeData,
   parseEther,
-  position,
 } from "./common";
 import { beforeEach } from "mocha";
 import { BigNumber } from "ethers";
@@ -23,9 +21,10 @@ import { BigNumber } from "ethers";
 let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
 let vault: RangeProtocolVault;
-let uniV3Factory: IUniswapV3Factory;
-let univ3Pool: IUniswapV3Pool;
-let nonfungiblePositionManager: INonfungiblePositionManager;
+let pancakeV3Factory: IPancakeV3Factory;
+let pancakev3Pool: IPancakeV3Pool;
+let nonfungiblePositionManager: any;
+let nonfungiblePositionManagerMintInterface: any;
 let token0: IERC20;
 let token1: IERC20;
 let manager: SignerWithAddress;
@@ -34,38 +33,33 @@ let nonManager: SignerWithAddress;
 let newManager: SignerWithAddress;
 let user2: SignerWithAddress;
 let lpProvider: SignerWithAddress;
-const poolFee = 3000;
+const poolFee = 10000;
 const name = "Test Token";
 const symbol = "TT";
 const amount0: BigNumber = parseEther("2");
 const amount1: BigNumber = parseEther("3");
 let initializeData: any;
-const lowerTick = -887220;
-const upperTick = 887220;
+const lowerTick = -880000;
+const upperTick = 880000;
 
 describe("RangeProtocolVault::exposure", () => {
   before(async () => {
     [manager, nonManager, user2, newManager, trader, lpProvider] =
       await ethers.getSigners();
-    const UniswapV3Factory = await ethers.getContractFactory(
-      "UniswapV3Factory"
-    );
-    uniV3Factory = (await UniswapV3Factory.deploy()) as IUniswapV3Factory;
+    pancakeV3Factory = (await ethers.getContractAt(
+      "IPancakeV3Factory",
+      "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+    )) as IPancakeV3Factory;
 
-    const NonfungiblePositionManager = await ethers.getContractFactory(
-      "NonfungiblePositionManager"
-    );
-    nonfungiblePositionManager = (await NonfungiblePositionManager.deploy(
-      uniV3Factory.address,
-      trader.address,
-      trader.address
-    )) as INonfungiblePositionManager;
-
+    nonfungiblePositionManager = "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364";
+    nonfungiblePositionManagerMintInterface = new ethers.utils.Interface([
+      "function mint(tuple(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256)) external payable returns (uint256,uint128)",
+    ]);
     const RangeProtocolFactory = await ethers.getContractFactory(
       "RangeProtocolFactory"
     );
     factory = (await RangeProtocolFactory.deploy(
-      uniV3Factory.address
+      pancakeV3Factory.address
     )) as RangeProtocolFactory;
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -78,14 +72,14 @@ describe("RangeProtocolVault::exposure", () => {
       token1 = tmp;
     }
 
-    await uniV3Factory.createPool(token0.address, token1.address, poolFee);
-    univ3Pool = (await ethers.getContractAt(
-      "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol:IUniswapV3Pool",
-      await uniV3Factory.getPool(token0.address, token1.address, poolFee)
-    )) as IUniswapV3Pool;
+    await pancakeV3Factory.createPool(token0.address, token1.address, poolFee);
+    pancakev3Pool = (await ethers.getContractAt(
+      "IPancakeV3Pool",
+      await pancakeV3Factory.getPool(token0.address, token1.address, poolFee)
+    )) as IPancakeV3Pool;
 
-    await univ3Pool.initialize(encodePriceSqrt("1", "1"));
-    await univ3Pool.increaseObservationCardinalityNext("15");
+    await pancakev3Pool.initialize(encodePriceSqrt("1", "1"));
+    await pancakev3Pool.increaseObservationCardinalityNext("15");
 
     initializeData = getInitializeData({
       managerAddress: manager.address,
@@ -132,26 +126,35 @@ describe("RangeProtocolVault::exposure", () => {
     } = await vault.getMintAmounts(amount0.mul(10), amount1.mul(10));
     await token0
       .connect(lpProvider)
-      .approve(nonfungiblePositionManager.address, amount0LpProvider);
+      .approve(nonfungiblePositionManager, amount0LpProvider);
     await token1
       .connect(lpProvider)
-      .approve(nonfungiblePositionManager.address, amount1LpProvider);
+      .approve(nonfungiblePositionManager, amount1LpProvider);
 
-    await nonfungiblePositionManager
-      .connect(lpProvider)
-      .mint([
-        token0.address,
-        token1.address,
-        3000,
-        lowerTick,
-        upperTick,
-        amount0LpProvider,
-        amount1LpProvider,
-        0,
-        0,
-        lpProvider.address,
-        new Date().getTime() + 10000000,
-      ]);
+    await ethers.provider.send("eth_sendTransaction", [
+      {
+        from: lpProvider.address,
+        to: nonfungiblePositionManager,
+        data: nonfungiblePositionManagerMintInterface.encodeFunctionData(
+          "mint",
+          [
+            [
+              token0.address,
+              token1.address,
+              poolFee,
+              lowerTick,
+              upperTick,
+              amount0LpProvider,
+              amount1LpProvider,
+              0,
+              0,
+              lpProvider.address,
+              new Date().getTime() + 10000000,
+            ],
+          ]
+        ),
+      },
+    ]);
 
     const {
       mintAmount: mintAmount1,
@@ -212,7 +215,9 @@ describe("RangeProtocolVault::exposure", () => {
     await token0.connect(trader).approve(swapTest.address, amount0);
     await token1.connect(trader).approve(swapTest.address, amount1);
 
-    await swapTest.connect(trader).swapZeroForOne(univ3Pool.address, amount1);
+    await swapTest
+      .connect(trader)
+      .swapZeroForOne(pancakev3Pool.address, amount1);
 
     const { amount0Current: amount0Current2, amount1Current: amount1Current2 } =
       await vault.getUnderlyingBalances();
@@ -254,7 +259,7 @@ describe("RangeProtocolVault::exposure", () => {
     console.log("token1 amount: ", amount1Current3.toString());
     console.log("==================================================");
 
-    console.log("Remove liquidity from uniswap pool");
+    console.log("Remove liquidity from pancake pool");
     await vault.removeLiquidity();
     console.log("==================================================");
 
@@ -294,8 +299,8 @@ describe("RangeProtocolVault::exposure", () => {
     );
     const mockSqrtPriceMath = await MockSqrtPriceMath.deploy();
 
-    const { sqrtPriceX96 } = await univ3Pool.slot0();
-    const liquidity = await univ3Pool.liquidity();
+    const { sqrtPriceX96 } = await pancakev3Pool.slot0();
+    const liquidity = await pancakev3Pool.liquidity();
 
     const nextPrice = currentAmountBaseToken.gt(initialAmountBaseToken)
       ? // there is profit in base token that we swap to quote token
@@ -327,7 +332,7 @@ describe("RangeProtocolVault::exposure", () => {
     console.log("token1 amount: ", amount1Current4.toString());
     console.log("==================================================");
 
-    console.log("Add liquidity back to the uniswap v3 pool");
+    console.log("Add liquidity back to the pancake v3 pool");
     await vault.addLiquidity(
       lowerTick,
       upperTick,
@@ -337,7 +342,7 @@ describe("RangeProtocolVault::exposure", () => {
 
     console.log("==================================================");
     console.log(
-      "Vault balance after providing the liquidity back to the uniswap pool"
+      "Vault balance after providing the liquidity back to the pancake pool"
     );
     const { amount0Current: amount0Current5, amount1Current: amount1Current5 } =
       await vault.getUnderlyingBalances();
