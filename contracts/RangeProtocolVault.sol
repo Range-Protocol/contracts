@@ -101,12 +101,12 @@ contract RangeProtocolVault is
      * @notice updateTicks it is called by the contract manager to update the ticks.
      * It can only be called once total supply is zero and the vault has not active position
      * in the algebra pool
-     * @param _lowerTick lowerTick to set
-     * @param _upperTick upperTick to set
+     * @param _bottomTick bottomTick to set
+     * @param _topTick topTick to set
      */
-    function updateTicks(int24 _lowerTick, int24 _upperTick) external override onlyManager {
+    function updateTicks(int24 _bottomTick, int24 _topTick) external override onlyManager {
         if (totalSupply() != 0 || inThePosition) revert VaultErrors.NotAllowedToUpdateTicks();
-        _updateTicks(_lowerTick, _upperTick);
+        _updateTicks(_bottomTick, _topTick);
 
         if (!mintStarted) {
             mintStarted = true;
@@ -186,8 +186,8 @@ contract RangeProtocolVault is
             // This branch will be executed for the first mint and as well as each time total supply is to be changed from zero to non-zero.
             (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
                 sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
+                bottomTick.getSqrtRatioAtTick(),
+                topTick.getSqrtRatioAtTick(),
                 SafeCastUpgradeable.toUint128(mintAmount)
             );
         } else {
@@ -217,12 +217,12 @@ contract RangeProtocolVault is
         if (_inThePosition) {
             uint128 liquidityMinted = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
+                bottomTick.getSqrtRatioAtTick(),
+                topTick.getSqrtRatioAtTick(),
                 amount0,
                 amount1
             );
-            pool.mint(address(this), address(this), lowerTick, upperTick, liquidityMinted, "");
+            pool.mint(address(this), address(this), bottomTick, topTick, liquidityMinted, "");
         }
 
         emit Minted(msg.sender, mintAmount, amount0, amount1);
@@ -298,11 +298,11 @@ contract RangeProtocolVault is
         (uint128 liquidity, , , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
-            int24 _lowerTick = lowerTick;
-            int24 _upperTick = upperTick;
+            int24 _bottomTick = bottomTick;
+            int24 _topTick = topTick;
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
 
-            emit LiquidityRemoved(liquidity, _lowerTick, _upperTick, amount0, amount1);
+            emit LiquidityRemoved(liquidity, _bottomTick, _topTick, amount0, amount1);
 
             _applyPerformanceFee(fee0, fee1);
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
@@ -312,7 +312,7 @@ contract RangeProtocolVault is
         // TicksSet event is not emitted here since the emitting would create a new position on subgraph but
         // the following statement is to only disallow any liquidity provision through the vault unless done
         // by manager (taking into account any features added in future).
-        lowerTick = upperTick;
+        bottomTick = topTick;
         inThePosition = false;
         emit InThePositionStatusSet(false);
     }
@@ -350,25 +350,25 @@ contract RangeProtocolVault is
     /**
      * @dev Mars@RangeProtocol
      * @notice addLiquidity allows manager to add liquidity into algebra pool into newer tick ranges.
-     * @param newLowerTick new lower tick to deposit liquidity into
-     * @param newUpperTick new upper tick to deposit liquidity into
+     * @param newBottomTick new lower tick to deposit liquidity into
+     * @param newTopTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
      * @return remainingAmount0 remaining amount from amount0
      * @return remainingAmount1 remaining amount from amount1
      */
     function addLiquidity(
-        int24 newLowerTick,
-        int24 newUpperTick,
+        int24 newBottomTick,
+        int24 newTopTick,
         uint256 amount0,
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        _validateTicks(newLowerTick, newUpperTick);
+        _validateTicks(newBottomTick, newTopTick);
         (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
         uint128 baseLiquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
-            newLowerTick.getSqrtRatioAtTick(),
-            newUpperTick.getSqrtRatioAtTick(),
+            newBottomTick.getSqrtRatioAtTick(),
+            newTopTick.getSqrtRatioAtTick(),
             amount0,
             amount1
         );
@@ -377,24 +377,24 @@ contract RangeProtocolVault is
             (uint256 amountDeposited0, uint256 amountDeposited1, ) = pool.mint(
                 address(this),
                 address(this),
-                newLowerTick,
-                newUpperTick,
+                newBottomTick,
+                newTopTick,
                 baseLiquidity,
                 ""
             );
             // Should return remaining token number for swap
             remainingAmount0 = amount0 - amountDeposited0;
             remainingAmount1 = amount1 - amountDeposited1;
-            if (lowerTick != newLowerTick || upperTick != newUpperTick) {
-                lowerTick = newLowerTick;
-                upperTick = newUpperTick;
-                emit TicksSet(newLowerTick, newUpperTick);
+            if (bottomTick != newBottomTick || topTick != newTopTick) {
+                bottomTick = newBottomTick;
+                topTick = newTopTick;
+                emit TicksSet(newBottomTick, newTopTick);
             }
 
             emit LiquidityAdded(
                 baseLiquidity,
-                newLowerTick,
-                newUpperTick,
+                newBottomTick,
+                newTopTick,
                 amountDeposited0,
                 amountDeposited1
             );
@@ -467,16 +467,16 @@ contract RangeProtocolVault is
             (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
             uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
+                bottomTick.getSqrtRatioAtTick(),
+                topTick.getSqrtRatioAtTick(),
                 amount0Max,
                 amount1Max
             );
             mintAmount = uint256(newLiquidity);
             (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
                 sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
+                bottomTick.getSqrtRatioAtTick(),
+                topTick.getSqrtRatioAtTick(),
                 newLiquidity
             );
         }
@@ -548,12 +548,12 @@ contract RangeProtocolVault is
      */
     function getPositionID() public view override returns (bytes32 positionID) {
         address _positionOwner = address(this);
-        int24 _lowerTick = lowerTick;
-        int24 _upperTick = upperTick;
+        int24 _bottomTick = bottomTick;
+        int24 _topTick = topTick;
         assembly {
             positionID := or(
-                shl(24, or(shl(24, _positionOwner), and(_lowerTick, 0xFFFFFF))),
-                and(_upperTick, 0xFFFFFF)
+                shl(24, or(shl(24, _positionOwner), and(_bottomTick, 0xFFFFFF))),
+                and(_topTick, 0xFFFFFF)
             )
         }
     }
@@ -600,8 +600,8 @@ contract RangeProtocolVault is
         if (liquidity != 0) {
             (amount0Current, amount1Current) = LiquidityAmounts.getAmountsForLiquidity(
                 sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
+                bottomTick.getSqrtRatioAtTick(),
+                topTick.getSqrtRatioAtTick(),
                 liquidity
             );
             fee0 = _feesEarned(true, feeGrowthInside0Last, tick, liquidity) + uint256(tokensOwed0);
@@ -628,12 +628,12 @@ contract RangeProtocolVault is
     function _withdraw(
         uint128 liquidity
     ) private returns (uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1) {
-        int24 _lowerTick = lowerTick;
-        int24 _upperTick = upperTick;
+        int24 _bottomTick = bottomTick;
+        int24 _topTick = topTick;
         uint256 preBalance0 = token0.balanceOf(address(this));
         uint256 preBalance1 = token1.balanceOf(address(this));
-        (burn0, burn1) = pool.burn(_lowerTick, _upperTick, liquidity);
-        pool.collect(address(this), _lowerTick, _upperTick, type(uint128).max, type(uint128).max);
+        (burn0, burn1) = pool.burn(_bottomTick, _topTick, liquidity);
+        pool.collect(address(this), _bottomTick, _topTick, type(uint128).max, type(uint128).max);
         fee0 = token0.balanceOf(address(this)) - preBalance0 - burn0;
         fee1 = token1.balanceOf(address(this)) - preBalance1 - burn1;
     }
@@ -679,32 +679,32 @@ contract RangeProtocolVault is
         int24 tick,
         uint128 liquidity
     ) private view returns (uint256 fee) {
-        uint256 feeGrowthOutsideLower;
-        uint256 feeGrowthOutsideUpper;
+        uint256 feeGrowthOutsideBottom;
+        uint256 feeGrowthOutsideTop;
         uint256 feeGrowthGlobal;
         if (isZero) {
             feeGrowthGlobal = pool.totalFeeGrowth0Token();
-            (, , feeGrowthOutsideLower, , , , , ) = pool.ticks(lowerTick);
-            (, , feeGrowthOutsideUpper, , , , , ) = pool.ticks(upperTick);
+            (, , feeGrowthOutsideBottom, , , , , ) = pool.ticks(bottomTick);
+            (, , feeGrowthOutsideTop, , , , , ) = pool.ticks(topTick);
         } else {
             feeGrowthGlobal = pool.totalFeeGrowth1Token();
-            (, , , feeGrowthOutsideLower, , , , ) = pool.ticks(lowerTick);
-            (, , , feeGrowthOutsideUpper, , , , ) = pool.ticks(upperTick);
+            (, , , feeGrowthOutsideBottom, , , , ) = pool.ticks(bottomTick);
+            (, , , feeGrowthOutsideTop, , , , ) = pool.ticks(topTick);
         }
 
         unchecked {
             uint256 feeGrowthBelow;
-            if (tick >= lowerTick) {
-                feeGrowthBelow = feeGrowthOutsideLower;
+            if (tick >= bottomTick) {
+                feeGrowthBelow = feeGrowthOutsideBottom;
             } else {
-                feeGrowthBelow = feeGrowthGlobal - feeGrowthOutsideLower;
+                feeGrowthBelow = feeGrowthGlobal - feeGrowthOutsideBottom;
             }
 
             uint256 feeGrowthAbove;
-            if (tick < upperTick) {
-                feeGrowthAbove = feeGrowthOutsideUpper;
+            if (tick < topTick) {
+                feeGrowthAbove = feeGrowthOutsideTop;
             } else {
-                feeGrowthAbove = feeGrowthGlobal - feeGrowthOutsideUpper;
+                feeGrowthAbove = feeGrowthGlobal - feeGrowthOutsideTop;
             }
             uint256 feeGrowthInside = feeGrowthGlobal - feeGrowthBelow - feeGrowthAbove;
 
@@ -776,33 +776,33 @@ contract RangeProtocolVault is
 
     /**
      * @notice _updateTicks internal function to validate and update ticks
-     * _lowerTick lower tick to update
-     * _upperTick upper tick to update
+     * _bottomTick lower tick to update
+     * _topTick upper tick to update
      */
-    function _updateTicks(int24 _lowerTick, int24 _upperTick) private {
-        _validateTicks(_lowerTick, _upperTick);
-        lowerTick = _lowerTick;
-        upperTick = _upperTick;
+    function _updateTicks(int24 _bottomTick, int24 _topTick) private {
+        _validateTicks(_bottomTick, _topTick);
+        bottomTick = _bottomTick;
+        topTick = _topTick;
 
         // Upon updating ticks inThePosition status is set to true.
         inThePosition = true;
         emit InThePositionStatusSet(true);
-        emit TicksSet(_lowerTick, _upperTick);
+        emit TicksSet(_bottomTick, _topTick);
     }
 
     /**
      * @notice _validateTicks validates the upper and lower ticks
-     * @param _lowerTick lower tick to validate
-     * @param _upperTick upper tick to validate
+     * @param _bottomTick lower tick to validate
+     * @param _topTick upper tick to validate
      */
-    function _validateTicks(int24 _lowerTick, int24 _upperTick) private view {
-        if (_lowerTick < TickMath.MIN_TICK || _upperTick > TickMath.MAX_TICK)
+    function _validateTicks(int24 _bottomTick, int24 _topTick) private view {
+        if (_bottomTick < TickMath.MIN_TICK || _topTick > TickMath.MAX_TICK)
             revert VaultErrors.TicksOutOfRange();
 
         if (
-            _lowerTick >= _upperTick ||
-            _lowerTick % tickSpacing != 0 ||
-            _upperTick % tickSpacing != 0
+            _bottomTick >= _topTick ||
+            _bottomTick % tickSpacing != 0 ||
+            _topTick % tickSpacing != 0
         ) revert VaultErrors.InvalidTicksSpacing();
     }
 }

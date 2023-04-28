@@ -19,15 +19,15 @@ interface IRangeProtocolVault is IAlgebraMintCallback, IAlgebraSwapCallback {
     );
     event LiquidityAdded(
         uint256 liquidityMinted,
-        int24 tickLower,
-        int24 tickUpper,
+        int24 tickBottom,
+        int24 tickTop,
         uint256 amount0In,
         uint256 amount1In
     );
     event LiquidityRemoved(
         uint256 liquidityRemoved,
-        int24 tickLower,
-        int24 tickUpper,
+        int24 tickBottom,
+        int24 tickTop,
         uint256 amount0Out,
         uint256 amount1Out
     );
@@ -35,12 +35,12 @@ interface IRangeProtocolVault is IAlgebraMintCallback, IAlgebraSwapCallback {
     event FeesUpdated(uint16 managingFee, uint16 performanceFee);
     event InThePositionStatusSet(bool inThePosition);
     event Swapped(bool zeroForOne, int256 amount0, int256 amount1);
-    event TicksSet(int24 lowerTick, int24 upperTick);
+    event TicksSet(int24 bottomTick, int24 topTick);
     event MintStarted();
 
     function initialize(address _pool, int24 _tickSpacing, bytes memory data) external;
 
-    function updateTicks(int24 _lowerTick, int24 _upperTick) external;
+    function updateTicks(int24 _bottomTick, int24 _topTick) external;
 
     function mint(uint256 mintAmount) external returns (uint256 amount0, uint256 amount1);
 
@@ -55,8 +55,8 @@ interface IRangeProtocolVault is IAlgebraMintCallback, IAlgebraSwapCallback {
     ) external returns (int256 amount0, int256 amount1);
 
     function addLiquidity(
-        int24 newLowerTick,
-        int24 newUpperTick,
+        int24 newBottomTick,
+        int24 newTopTick,
         uint256 amount0,
         uint256 amount1
     ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);

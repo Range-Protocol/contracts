@@ -29,8 +29,8 @@ const symbol = "TT";
 const amount0: BigNumber = parseEther("2");
 const amount1: BigNumber = parseEther("3");
 let initializeData: any;
-const lowerTick = -887040;
-const upperTick = 887040;
+const bottomTick = -887040;
+const topTick = 887040;
 
 describe("RangeProtocolVault", () => {
   before(async () => {
@@ -108,7 +108,7 @@ describe("RangeProtocolVault", () => {
   it("non-manager should not be able to updateTicks", async () => {
     expect(await vault.mintStarted()).to.be.equal(false);
     await expect(
-      vault.connect(nonManager).updateTicks(lowerTick, upperTick)
+      vault.connect(nonManager).updateTicks(bottomTick, topTick)
     ).to.be.revertedWith("Ownable: caller is not the manager");
   });
 
@@ -134,14 +134,14 @@ describe("RangeProtocolVault", () => {
 
   it("manager should be able to updateTicks", async () => {
     expect(await vault.mintStarted()).to.be.equal(false);
-    await expect(vault.connect(manager).updateTicks(lowerTick, upperTick))
+    await expect(vault.connect(manager).updateTicks(bottomTick, topTick))
       .to.emit(vault, "MintStarted")
       .to.emit(vault, "TicksSet")
-      .withArgs(lowerTick, upperTick);
+      .withArgs(bottomTick, topTick);
 
     expect(await vault.mintStarted()).to.be.equal(true);
-    expect(await vault.lowerTick()).to.be.equal(lowerTick);
-    expect(await vault.upperTick()).to.be.equal(upperTick);
+    expect(await vault.bottomTick()).to.be.equal(bottomTick);
+    expect(await vault.topTick()).to.be.equal(topTick);
   });
 
   it("should not allow minting with zero mint amount", async () => {
@@ -338,7 +338,7 @@ describe("RangeProtocolVault", () => {
 
   describe("Remove Liquidity", () => {
     before(async () => {
-      await vault.updateTicks(lowerTick, upperTick);
+      await vault.updateTicks(bottomTick, topTick);
     });
 
     beforeEach(async () => {
@@ -355,7 +355,7 @@ describe("RangeProtocolVault", () => {
     });
 
     it("should remove liquidity by manager", async () => {
-      expect(await vault.lowerTick()).to.not.be.equal(await vault.upperTick());
+      expect(await vault.bottomTick()).to.not.be.equal(await vault.topTick());
       expect(await vault.inThePosition()).to.be.equal(true);
       const { liquidityAmount: liquidityBefore } = await algebraPool.positions(
         await vault.getPositionID()
@@ -369,7 +369,7 @@ describe("RangeProtocolVault", () => {
         .to.emit(vault, "FeesEarned")
         .withArgs(fee0, fee1);
 
-      expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
+      expect(await vault.bottomTick()).to.be.equal(await vault.topTick());
       expect(await vault.inThePosition()).to.be.equal(false);
       const { liquidityAmount: liquidityAfter } = await algebraPool.positions(
         await vault.getPositionID()
@@ -425,7 +425,7 @@ describe("RangeProtocolVault", () => {
 
   describe("Add Liquidity", () => {
     before(async () => {
-      await vault.updateTicks(lowerTick, upperTick);
+      await vault.updateTicks(bottomTick, topTick);
     });
 
     beforeEach(async () => {
@@ -443,7 +443,7 @@ describe("RangeProtocolVault", () => {
       await expect(
         vault
           .connect(nonManager)
-          .addLiquidity(lowerTick, upperTick, amount0, amount1)
+          .addLiquidity(bottomTick, topTick, amount0, amount1)
       ).to.be.revertedWith("Ownable: caller is not the manager");
     });
 
@@ -460,17 +460,17 @@ describe("RangeProtocolVault", () => {
       const { price } = await algebraPool.globalState();
       const liquidity = mockLiquidityAmounts.getLiquidityForAmounts(
         price,
-        lowerTick,
-        upperTick,
+        bottomTick,
+        topTick,
         amount0Current,
         amount1Current
       );
 
       await expect(
-        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
+        vault.addLiquidity(bottomTick, topTick, amount0Current, amount1Current)
       )
         .to.emit(vault, "LiquidityAdded")
-        .withArgs(liquidity, lowerTick, upperTick, anyValue, anyValue)
+        .withArgs(liquidity, bottomTick, topTick, anyValue, anyValue)
         .to.emit(vault, "InThePositionStatusSet")
         .withArgs(true);
     });

@@ -8,8 +8,8 @@ import {IAlgebraPool} from "./algebra/core/contracts/interfaces/IAlgebraPool.sol
  * @notice RangeProtocolVaultStorage a storage contract for RangeProtocolVault
  */
 abstract contract RangeProtocolVaultStorage {
-    int24 public lowerTick;
-    int24 public upperTick;
+    int24 public bottomTick;
+    int24 public topTick;
     bool public inThePosition;
     bool public mintStarted;
 

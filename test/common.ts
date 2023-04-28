@@ -15,12 +15,12 @@ export const encodePriceSqrt = (reserve1: string, reserve0: string) => {
 };
 export const position = (
   address: string,
-  lowerTick: number,
-  upperTick: number
+  bottomTick: number,
+  topTick: number
 ) => {
   return ethers.utils.solidityKeccak256(
     ["address", "int24", "int24"],
-    [address, lowerTick, upperTick]
+    [address, bottomTick, topTick]
   );
 };
 

@@ -34,8 +34,8 @@ const symbol = "TT";
 const amount0: BigNumber = parseEther("2");
 const amount1: BigNumber = parseEther("3");
 let initializeData: any;
-const lowerTick = -887220;
-const upperTick = 887220;
+const bottomTick = -887220;
+const topTick = 887220;
 
 describe("RangeProtocolVault::exposure", () => {
   before(async () => {
@@ -99,7 +99,7 @@ describe("RangeProtocolVault::exposure", () => {
       vaultAddress[0]
     )) as RangeProtocolVault;
 
-    await expect(vault.connect(manager).updateTicks(lowerTick, upperTick));
+    await expect(vault.connect(manager).updateTicks(bottomTick, topTick));
   });
 
   beforeEach(async () => {
@@ -134,8 +134,8 @@ describe("RangeProtocolVault::exposure", () => {
             [
               token0.address,
               token1.address,
-              lowerTick,
-              upperTick,
+              bottomTick,
+              topTick,
               amount0LpProvider,
               amount1LpProvider,
               0,
@@ -324,8 +324,8 @@ describe("RangeProtocolVault::exposure", () => {
 
     console.log("Add liquidity back to the algebra v3 pool");
     await vault.addLiquidity(
-      lowerTick,
-      upperTick,
+      bottomTick,
+      topTick,
       amount0Current4,
       amount1Current4
     );
