@@ -1,24 +1,20 @@
 import { ethers } from "hardhat";
-import { LedgerSigner } from "@anders-t/ethers-ledger";
-import { getInitializeData } from "../test/common";
+import { getInitializeData } from "../../test/common";
 
 async function main() {
-  const provider = ethers.getDefaultProvider(""); // To be updated.
-  const ledger = await new LedgerSigner(provider, ""); // To be updated.
   const managerAddress = "0x84b43ce5fB1FAF013181FEA96ffA4af6179e396a"; // To be updated.
   const rangeProtocolFactoryAddress =
-    "0x4bF9CDcCE12924B559928623a5d23598ca19367B"; // To be updated.
-  const vaultImplAddress = ""; // to be updated.
-  const token0 = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-  const token1 = "0xc944E90C64B2c07662A292be6244BDf05Cda44a7";
-  const name = ""; // To be updated.
-  const symbol = ""; // To be updated.
+    "0x5427d4E232b2520550889c19799cA4adF59076bA"; // To be updated.
+  const vaultImplAddress = "0xc4e502EFB8Bdf50dBb36b30E73800bA5Fc71cCF0"; // to be updated.
+  const token0 = "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270";
+  const token1 = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+  const name = "Test Token"; // To be updated.
+  const symbol = "TT"; // To be updated.
 
   let factory = await ethers.getContractAt(
     "RangeProtocolFactory",
     rangeProtocolFactoryAddress
   );
-  factory = await factory.connect(ledger);
   const data = getInitializeData({
     managerAddress,
     name,
