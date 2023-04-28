@@ -4,56 +4,38 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {
   IERC20,
-  IUniswapV3Factory,
-  IUniswapV3Pool,
+  IAlgebraFactory,
+  IAlgebraPool,
   RangeProtocolVault,
   RangeProtocolFactory,
 } from "../typechain";
-import {
-  bn,
-  encodePriceSqrt,
-  getInitializeData,
-  parseEther,
-  position,
-} from "./common";
+import { bn, encodePriceSqrt, getInitializeData, parseEther } from "./common";
 import { beforeEach } from "mocha";
 import { BigNumber } from "ethers";
 
 let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
 let vault: RangeProtocolVault;
-let uniV3Factory: IUniswapV3Factory;
-let univ3Pool: IUniswapV3Pool;
+let algebraFactory: IAlgebraFactory;
+let algebraPool: IAlgebraPool;
 let token0: IERC20;
 let token1: IERC20;
 let manager: SignerWithAddress;
 let nonManager: SignerWithAddress;
 let newManager: SignerWithAddress;
 let user2: SignerWithAddress;
-const poolFee = 3000;
 const name = "Test Token";
 const symbol = "TT";
 const amount0: BigNumber = parseEther("2");
 const amount1: BigNumber = parseEther("3");
 let initializeData: any;
-const lowerTick = -887220;
-const upperTick = 887220;
+const lowerTick = -887040;
+const upperTick = 887040;
 
 describe("RangeProtocolVault", () => {
   before(async () => {
     [manager, nonManager, user2, newManager] = await ethers.getSigners();
-    const UniswapV3Factory = await ethers.getContractFactory(
-      "UniswapV3Factory"
-    );
-    uniV3Factory = (await UniswapV3Factory.deploy()) as IUniswapV3Factory;
-
-    const RangeProtocolFactory = await ethers.getContractFactory(
-      "RangeProtocolFactory"
-    );
-    factory = (await RangeProtocolFactory.deploy(
-      uniV3Factory.address
-    )) as RangeProtocolFactory;
-
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     const MockERC20 = await ethers.getContractFactory("MockERC20");
     token0 = (await MockERC20.deploy()) as IERC20;
     token1 = (await MockERC20.deploy()) as IERC20;
@@ -64,20 +46,26 @@ describe("RangeProtocolVault", () => {
       token1 = tmp;
     }
 
-    await uniV3Factory.createPool(token0.address, token1.address, poolFee);
-    univ3Pool = (await ethers.getContractAt(
-      "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol:IUniswapV3Pool",
-      await uniV3Factory.getPool(token0.address, token1.address, poolFee)
-    )) as IUniswapV3Pool;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const RangeProtocolFactory = await ethers.getContractFactory(
+      "RangeProtocolFactory"
+    );
+    algebraFactory = (await ethers.getContractAt(
+      "IAlgebraFactory",
+      "0x411b0fAcC3489691f28ad58c47006AF5E3Ab3A28"
+    )) as IAlgebraFactory;
+    await algebraFactory.createPool(token0.address, token1.address);
 
-    await univ3Pool.initialize(encodePriceSqrt("1", "1"));
-    await univ3Pool.increaseObservationCardinalityNext("15");
+    factory = (await RangeProtocolFactory.deploy(
+      algebraFactory.address
+    )) as RangeProtocolFactory;
 
-    initializeData = getInitializeData({
-      managerAddress: manager.address,
-      name,
-      symbol,
-    });
+    algebraPool = (await ethers.getContractAt(
+      "IAlgebraPool",
+      await algebraFactory.poolByPair(token0.address, token1.address)
+    )) as IAlgebraPool;
+
+    await algebraPool.initialize(encodePriceSqrt("1", "1"));
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const RangeProtocolVault = await ethers.getContractFactory(
@@ -85,10 +73,15 @@ describe("RangeProtocolVault", () => {
     );
     vaultImpl = (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 
+    initializeData = getInitializeData({
+      managerAddress: manager.address,
+      name,
+      symbol,
+    });
+
     await factory.createVault(
       token0.address,
       token1.address,
-      poolFee,
       vaultImpl.address,
       initializeData
     );
@@ -186,16 +179,16 @@ describe("RangeProtocolVault", () => {
     // 1.999999999999999999 1.999999999999999999
 
     expect(await vault.totalSupply()).to.be.equal(0);
-    expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
-    expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(0);
+    expect(await token0.balanceOf(algebraPool.address)).to.be.equal(0);
+    expect(await token1.balanceOf(algebraPool.address)).to.be.equal(0);
 
     await expect(vault.mint(mintAmount))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
     expect(await vault.totalSupply()).to.be.equal(mintAmount);
-    expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(_amount0);
-    expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(_amount1);
+    expect(await token0.balanceOf(algebraPool.address)).to.be.equal(_amount0);
+    expect(await token1.balanceOf(algebraPool.address)).to.be.equal(_amount1);
     expect(await vault.users(0)).to.be.equal(manager.address);
     expect((await vault.userVaults(manager.address)).exists).to.be.true;
     expect((await vault.userVaults(manager.address)).token0).to.be.equal(
@@ -364,8 +357,8 @@ describe("RangeProtocolVault", () => {
     it("should remove liquidity by manager", async () => {
       expect(await vault.lowerTick()).to.not.be.equal(await vault.upperTick());
       expect(await vault.inThePosition()).to.be.equal(true);
-      const { _liquidity: liquidityBefore } = await univ3Pool.positions(
-        position(vault.address, lowerTick, upperTick)
+      const { liquidityAmount: liquidityBefore } = await algebraPool.positions(
+        await vault.getPositionID()
       );
       expect(liquidityBefore).not.to.be.equal(0);
 
@@ -378,15 +371,15 @@ describe("RangeProtocolVault", () => {
 
       expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
       expect(await vault.inThePosition()).to.be.equal(false);
-      const { _liquidity: liquidityAfter } = await univ3Pool.positions(
-        position(vault.address, lowerTick, upperTick)
+      const { liquidityAmount: liquidityAfter } = await algebraPool.positions(
+        await vault.getPositionID()
       );
       expect(liquidityAfter).to.be.equal(0);
     });
 
     it("should burn vault shares when liquidity is removed", async () => {
-      const { _liquidity: liquidity } = await univ3Pool.positions(
-        position(vault.address, lowerTick, upperTick)
+      const { liquidityAmount: liquidity } = await algebraPool.positions(
+        await vault.getPositionID()
       );
 
       expect(liquidity).to.be.equal(0);
@@ -464,9 +457,9 @@ describe("RangeProtocolVault", () => {
       );
       const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
 
-      const { sqrtPriceX96 } = await univ3Pool.slot0();
+      const { price } = await algebraPool.globalState();
       const liquidity = mockLiquidityAmounts.getLiquidityForAmounts(
-        sqrtPriceX96,
+        price,
         lowerTick,
         upperTick,
         amount0Current,
@@ -485,11 +478,11 @@ describe("RangeProtocolVault", () => {
 
   describe("Fee collection", () => {
     it("non-manager should not collect fee", async () => {
-      const { sqrtPriceX96 } = await univ3Pool.slot0();
-      const liquidity = await univ3Pool.liquidity();
+      const { price } = await algebraPool.globalState();
+      const liquidity = await algebraPool.liquidity();
       await token1.transfer(vault.address, amount1);
       const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      await vault.swap(false, amount1, price.add(priceNext));
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())
@@ -502,11 +495,11 @@ describe("RangeProtocolVault", () => {
     });
 
     it("should manager collect fee", async () => {
-      const { sqrtPriceX96 } = await univ3Pool.slot0();
-      const liquidity = await univ3Pool.liquidity();
+      const { price } = await algebraPool.globalState();
+      const liquidity = await algebraPool.liquidity();
       await token1.transfer(vault.address, amount1);
       const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      await vault.swap(false, amount1, price.add(priceNext));
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())

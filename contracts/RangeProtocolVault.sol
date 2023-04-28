@@ -9,11 +9,11 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/se
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IAlgebraPool} from "./algebra/core/contracts/interfaces/IAlgebraPool.sol";
 
-import {TickMath} from "./uniswap/TickMath.sol";
-import {LiquidityAmounts} from "./uniswap/LiquidityAmounts.sol";
-import {FullMath} from "./uniswap/FullMath.sol";
+import {TickMath} from "./algebra/core/contracts/libraries/TickMath.sol";
+import {LiquidityAmounts} from "./algebra/periphery/contracts/libraries/LiquidityAmounts.sol";
+import {FullMath} from "./algebra/core/contracts/libraries/FullMath.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
 import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
@@ -21,20 +21,20 @@ import {VaultErrors} from "./errors/VaultErrors.sol";
 
 /**
  * @dev Mars@RangeProtocol
- * @notice RangeProtocolVault is fungible vault shares contract that accepts uniswap pool tokens for liquidity
- * provision to the corresponding uniswap v3 pool. This contract is configurable to work with any uniswap v3
+ * @notice RangeProtocolVault is fungible vault shares contract that accepts algebra pool tokens for liquidity
+ * provision to the corresponding algebra pool. This contract is configurable to work with any algebra
  * pool and is initialized through RangeProtocolFactory contract's createVault function which determines
  * the pool address based provided tokens addresses and fee tier.
  *
  * The contract allows minting and burning of vault shares where minting involves providing token0 and/or token1
  * for the current set ticks (or based on ratio of token0 and token1 amounts in the vault when vault does not have an
- * active position in the uniswap v3 pool) and burning involves removing liquidity from the uniswap v3 pool along with
+ * active position in the algebra pool) and burning involves removing liquidity from the algebra pool along with
  * the vault's fee.
  *
- * The manager of the contract can remove liquidity from uniswap v3 pool and deposit into a newer take range to maximise
+ * The manager of the contract can remove liquidity from algebra pool and deposit into a newer take range to maximise
  * the profit by keeping liquidity out of the pool under high volatility periods.
  *
- * Part of the fee earned from uniswap v3 position is paid to manager as performance fee and fee is charged on the LP's
+ * Part of the fee earned from algebra position is paid to manager as performance fee and fee is charged on the LP's
  * notional amount as managing fee.
  */
 contract RangeProtocolVault is
@@ -50,7 +50,7 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from uniswap v3 pool.
+    /// Performance fee cannot be set more than 10% of the fee earned from algebra pool.
     uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
     uint16 public constant MAX_MANAGING_FEE_BPS = 100;
@@ -62,8 +62,8 @@ contract RangeProtocolVault is
     /**
      * @notice initialize initializes the vault contract and is called right after proxy deployment
      * by the factory contract.
-     * @param _pool address of the uniswap v3 pool associated with vault
-     * @param _tickSpacing tick spacing of the uniswap pool
+     * @param _pool address of the algebra pool associated with vault
+     * @param _tickSpacing tick spacing of the algebra pool
      * @param data additional config data associated with the implementation. The data type chosen is bytes
      * to keep the initialize function implementation contract generic to be compatible with factory contract
      */
@@ -85,7 +85,7 @@ contract RangeProtocolVault is
 
         _transferOwnership(manager);
 
-        pool = IUniswapV3Pool(_pool);
+        pool = IAlgebraPool(_pool);
         token0 = IERC20Upgradeable(pool.token0());
         token1 = IERC20Upgradeable(pool.token1());
         tickSpacing = _tickSpacing;
@@ -100,7 +100,7 @@ contract RangeProtocolVault is
     /**
      * @notice updateTicks it is called by the contract manager to update the ticks.
      * It can only be called once total supply is zero and the vault has not active position
-     * in the uniswap pool
+     * in the algebra pool
      * @param _lowerTick lowerTick to set
      * @param _upperTick upperTick to set
      */
@@ -129,8 +129,8 @@ contract RangeProtocolVault is
         _unpause();
     }
 
-    /// @notice uniswapV3MintCallback Uniswap V3 callback fn, called back on pool.mint
-    function uniswapV3MintCallback(
+    /// @notice algebraMintCallback Algebra callback fn, called back on pool.mint
+    function algebraMintCallback(
         uint256 amount0Owed,
         uint256 amount1Owed,
         bytes calldata
@@ -146,8 +146,8 @@ contract RangeProtocolVault is
         }
     }
 
-    /// @notice uniswapV3SwapCallback Uniswap v3 callback fn, called back on pool.swap
-    function uniswapV3SwapCallback(
+    /// @notice algebraSwapCallback Algebra callback fn, called back on pool.swap
+    function algebraSwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
         bytes calldata
@@ -162,7 +162,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice mint mints range vault shares, fractional shares of a Uniswap V3 position/strategy
+     * @notice mint mints range vault shares, fractional shares of a Algebra position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
@@ -175,7 +175,7 @@ contract RangeProtocolVault is
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
         uint256 totalSupply = totalSupply();
         bool _inThePosition = inThePosition;
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
 
         if (totalSupply > 0) {
             (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
@@ -222,14 +222,14 @@ contract RangeProtocolVault is
                 amount0,
                 amount1
             );
-            pool.mint(address(this), lowerTick, upperTick, liquidityMinted, "");
+            pool.mint(address(this), address(this), lowerTick, upperTick, liquidityMinted, "");
         }
 
         emit Minted(msg.sender, mintAmount, amount0, amount1);
     }
 
     /**
-     * @notice burn burns range vault shares (shares of a Uniswap V3 position) and receive underlying
+     * @notice burn burns range vault shares (shares of a Algebra position) and receive underlying
      * @param burnAmount The number of shares to burn
      * @return amount0 amount of token0 transferred to msg.sender for burning {burnAmount}
      * @return amount1 amount of token1 transferred to msg.sender for burning {burnAmount}
@@ -243,7 +243,7 @@ contract RangeProtocolVault is
         _burn(msg.sender, burnAmount);
 
         if (inThePosition) {
-            (uint128 liquidity, , , , ) = pool.positions(getPositionID());
+            (uint128 liquidity, , , , , ) = pool.positions(getPositionID());
             uint256 liquidityBurned_ = FullMath.mulDiv(burnAmount, liquidity, totalSupply);
             uint128 liquidityBurned = SafeCastUpgradeable.toUint128(liquidityBurned_);
             (uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1) = _withdraw(liquidityBurned);
@@ -291,11 +291,11 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice removeLiquidity removes liquidity from uniswap pool and receives underlying tokens
+     * @notice removeLiquidity removes liquidity from algebra pool and receives underlying tokens
      * in the vault contract.
      */
     function removeLiquidity() external override onlyManager {
-        (uint128 liquidity, , , , ) = pool.positions(getPositionID());
+        (uint128 liquidity, , , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
             int24 _lowerTick = lowerTick;
@@ -349,7 +349,7 @@ contract RangeProtocolVault is
 
     /**
      * @dev Mars@RangeProtocol
-     * @notice addLiquidity allows manager to add liquidity into uniswap pool into newer tick ranges.
+     * @notice addLiquidity allows manager to add liquidity into algebra pool into newer tick ranges.
      * @param newLowerTick new lower tick to deposit liquidity into
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
@@ -364,7 +364,7 @@ contract RangeProtocolVault is
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
         _validateTicks(newLowerTick, newUpperTick);
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
         uint128 baseLiquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
             newLowerTick.getSqrtRatioAtTick(),
@@ -374,7 +374,8 @@ contract RangeProtocolVault is
         );
 
         if (baseLiquidity > 0) {
-            (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(
+            (uint256 amountDeposited0, uint256 amountDeposited1, ) = pool.mint(
+                address(this),
                 address(this),
                 newLowerTick,
                 newUpperTick,
@@ -406,7 +407,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @dev pullFeeFromPool pulls accrued fee from uniswap v3 pool that position has accrued since
+     * @dev pullFeeFromPool pulls accrued fee from algebra pool that position has accrued since
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
@@ -463,7 +464,7 @@ contract RangeProtocolVault is
         if (totalSupply > 0) {
             (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
         } else {
-            (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+            (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
             uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
                 lowerTick.getSqrtRatioAtTick(),
@@ -483,7 +484,7 @@ contract RangeProtocolVault is
 
     /**
      * @notice compute total underlying token0 and token1 token supply at provided price
-     * includes current liquidity invested in uniswap position, current fees earned
+     * includes current liquidity invested in algebra position, current fees earned
      * and any uninvested leftover (but does not include manager fees accrued)
      * @param sqrtRatioX96 price to computer underlying balances at
      * @return amount0Current current total underlying balance of token0
@@ -492,7 +493,7 @@ contract RangeProtocolVault is
     function getUnderlyingBalancesAtPrice(
         uint160 sqrtRatioX96
     ) external view override returns (uint256 amount0Current, uint256 amount1Current) {
-        (, int24 tick, , , , , ) = pool.slot0();
+        (, int24 tick, , , , , ) = pool.globalState();
         return _getUnderlyingBalances(sqrtRatioX96, tick);
     }
 
@@ -502,9 +503,10 @@ contract RangeProtocolVault is
      * @return fee1 uncollected fee in token1
      */
     function getCurrentFees() external view override returns (uint256 fee0, uint256 fee1) {
-        (, int24 tick, , , , , ) = pool.slot0();
+        (, int24 tick, , , , , ) = pool.globalState();
         (
             uint128 liquidity,
+            ,
             uint256 feeGrowthInside0Last,
             uint256 feeGrowthInside1Last,
             uint128 tokensOwed0,
@@ -541,16 +543,24 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice getPositionID returns the position id of the vault in uniswap pool
-     * @return positionID position id of the vault in uniswap pool
+     * @notice getPositionID returns the position id of the vault in algebra pool
+     * @return positionID position id of the vault in algebra pool
      */
     function getPositionID() public view override returns (bytes32 positionID) {
-        return keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
+        address _positionOwner = address(this);
+        int24 _lowerTick = lowerTick;
+        int24 _upperTick = upperTick;
+        assembly {
+            positionID := or(
+                shl(24, or(shl(24, _positionOwner), and(_lowerTick, 0xFFFFFF))),
+                and(_upperTick, 0xFFFFFF)
+            )
+        }
     }
 
     /**
      * @notice compute total underlying token0 and token1 token supply at current price
-     * includes current liquidity invested in uniswap position, current fees earned
+     * includes current liquidity invested in algebra position, current fees earned
      * and any uninvested leftover (but does not include manager fees accrued)
      * @return amount0Current current total underlying balance of token0
      * @return amount1Current current total underlying balance of token1
@@ -561,7 +571,7 @@ contract RangeProtocolVault is
         override
         returns (uint256 amount0Current, uint256 amount1Current)
     {
-        (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
+        (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.globalState();
         return _getUnderlyingBalances(sqrtRatioX96, tick);
     }
 
@@ -578,6 +588,7 @@ contract RangeProtocolVault is
     ) internal view returns (uint256 amount0Current, uint256 amount1Current) {
         (
             uint128 liquidity,
+            ,
             uint256 feeGrowthInside0Last,
             uint256 feeGrowthInside1Last,
             uint128 tokensOwed0,
@@ -611,8 +622,8 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _withdraw internal function to withdraw liquidity from uniswap pool
-     * @param liquidity liquidity to remove from the uniswap pool
+     * @notice _withdraw internal function to withdraw liquidity from algebra pool
+     * @param liquidity liquidity to remove from the algebra pool
      */
     function _withdraw(
         uint128 liquidity
@@ -660,7 +671,7 @@ contract RangeProtocolVault is
     /**
      * @notice _feesEarned internal function to return the fees accrued
      * @param isZero true to compute fee for token0 and false to compute fee for token1
-     * @param feeGrowthInsideLast last time the fee was realized for the vault in uniswap pool
+     * @param feeGrowthInsideLast last time the fee was realized for the vault in algebra pool
      */
     function _feesEarned(
         bool isZero,
@@ -672,11 +683,11 @@ contract RangeProtocolVault is
         uint256 feeGrowthOutsideUpper;
         uint256 feeGrowthGlobal;
         if (isZero) {
-            feeGrowthGlobal = pool.feeGrowthGlobal0X128();
+            feeGrowthGlobal = pool.totalFeeGrowth0Token();
             (, , feeGrowthOutsideLower, , , , , ) = pool.ticks(lowerTick);
             (, , feeGrowthOutsideUpper, , , , , ) = pool.ticks(upperTick);
         } else {
-            feeGrowthGlobal = pool.feeGrowthGlobal1X128();
+            feeGrowthGlobal = pool.totalFeeGrowth1Token();
             (, , , feeGrowthOutsideLower, , , , ) = pool.ticks(lowerTick);
             (, , , feeGrowthOutsideUpper, , , , ) = pool.ticks(upperTick);
         }
@@ -717,7 +728,7 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _applyPerformanceFee applies the performance fee to the fees earned from uniswap v3 pool.
+     * @notice _applyPerformanceFee applies the performance fee to the fees earned from algebra pool.
      * @param fee0 fee earned in token0
      * @param fee1 fee earned in token1
      */
@@ -746,9 +757,9 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice _netPerformanceFees computes the fee share for manager as performance fee from the fee earned from uniswap v3 pool.
-     * @param rawFee0 fee earned in token0 from uniswap v3 pool.
-     * @param rawFee1 fee earned in token1 from uniswap v3 pool.
+     * @notice _netPerformanceFees computes the fee share for manager as performance fee from the fee earned from algebra pool.
+     * @param rawFee0 fee earned in token0 from algebra pool.
+     * @param rawFee1 fee earned in token1 from algebra pool.
      * @return fee0AfterDeduction fee in token0 earned after deducting performance fee from earned fee.
      * @return fee1AfterDeduction fee in token1 earned after deducting performance fee from earned fee.
      */

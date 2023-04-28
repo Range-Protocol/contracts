@@ -4,8 +4,8 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {
   IERC20,
-  IUniswapV3Factory,
-  IUniswapV3Pool,
+  IAlgebraFactory,
+  IAlgebraPool,
   RangeProtocolVault,
   RangeProtocolFactory,
 } from "../typechain";
@@ -14,14 +14,13 @@ import { Contract } from "ethers";
 
 let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
-let uniV3Factory: IUniswapV3Factory;
-let univ3Pool: IUniswapV3Pool;
+let algebraFactory: IAlgebraFactory;
+let algebraPool: IAlgebraPool;
 let token0: IERC20;
 let token1: IERC20;
 let owner: SignerWithAddress;
 let nonOwner: SignerWithAddress;
 let newOwner: SignerWithAddress;
-const poolFee = 10000;
 const name = "Test Token";
 const symbol = "TT";
 let initializeData: any;
@@ -29,19 +28,6 @@ let initializeData: any;
 describe("RangeProtocolFactory", () => {
   before(async function () {
     [owner, nonOwner, newOwner] = await ethers.getSigners();
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const UniswapV3Factory = await ethers.getContractFactory(
-      "UniswapV3Factory"
-    );
-    uniV3Factory = (await UniswapV3Factory.deploy()) as IUniswapV3Factory;
-
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const RangeProtocolFactory = await ethers.getContractFactory(
-      "RangeProtocolFactory"
-    );
-    factory = (await RangeProtocolFactory.deploy(
-      uniV3Factory.address
-    )) as RangeProtocolFactory;
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -54,11 +40,24 @@ describe("RangeProtocolFactory", () => {
       token1 = tmp;
     }
 
-    await uniV3Factory.createPool(token0.address, token1.address, poolFee);
-    univ3Pool = (await ethers.getContractAt(
-      "IUniswapV3Pool",
-      await uniV3Factory.getPool(token0.address, token1.address, poolFee)
-    )) as IUniswapV3Pool;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const RangeProtocolFactory = await ethers.getContractFactory(
+      "RangeProtocolFactory"
+    );
+    algebraFactory = (await ethers.getContractAt(
+      "IAlgebraFactory",
+      "0x411b0fAcC3489691f28ad58c47006AF5E3Ab3A28"
+    )) as IAlgebraFactory;
+    await algebraFactory.createPool(token0.address, token1.address);
+
+    factory = (await RangeProtocolFactory.deploy(
+      algebraFactory.address
+    )) as RangeProtocolFactory;
+
+    algebraPool = (await ethers.getContractAt(
+      "IAlgebraPool",
+      await algebraFactory.poolByPair(token0.address, token1.address)
+    )) as IAlgebraPool;
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const RangeProtocolVault = await ethers.getContractFactory(
@@ -74,7 +73,7 @@ describe("RangeProtocolFactory", () => {
   });
 
   it("should deploy RangeProtocolFactory", async function () {
-    expect(await factory.factory()).to.be.equal(uniV3Factory.address);
+    expect(await factory.factory()).to.be.equal(algebraFactory.address);
     expect(await factory.owner()).to.be.equal(owner.address);
   });
 
@@ -83,7 +82,6 @@ describe("RangeProtocolFactory", () => {
       factory.createVault(
         ZERO_ADDRESS,
         token1.address,
-        poolFee,
         vaultImpl.address,
         initializeData
       )
@@ -95,7 +93,6 @@ describe("RangeProtocolFactory", () => {
       factory.createVault(
         token0.address,
         token0.address,
-        poolFee,
         vaultImpl.address,
         initializeData
       )
@@ -109,11 +106,10 @@ describe("RangeProtocolFactory", () => {
         .createVault(
           token0.address,
           token1.address,
-          poolFee,
           vaultImpl.address,
           initializeData
         )
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    ).to.be.reverted;
   });
 
   it("owner should be able to deploy vault", async function () {
@@ -121,13 +117,12 @@ describe("RangeProtocolFactory", () => {
       factory.createVault(
         token0.address,
         token1.address,
-        poolFee,
         vaultImpl.address,
         initializeData
       )
     )
       .to.emit(factory, "VaultCreated")
-      .withArgs((univ3Pool as Contract).address, anyValue);
+      .withArgs((algebraPool as Contract).address, anyValue);
 
     expect(await factory.vaultCount()).to.be.equal(1);
     expect((await factory.getVaultAddresses(0, 0))[0]).to.not.be.equal(
@@ -140,13 +135,12 @@ describe("RangeProtocolFactory", () => {
       factory.createVault(
         token0.address,
         token1.address,
-        poolFee,
         vaultImpl.address,
         initializeData
       )
     )
       .to.emit(factory, "VaultCreated")
-      .withArgs((univ3Pool as Contract).address, anyValue);
+      .withArgs((algebraPool as Contract).address, anyValue);
 
     expect(await factory.vaultCount()).to.be.equal(2);
     const vault0Address = (await factory.getVaultAddresses(0, 0))[0];

@@ -31,11 +31,7 @@ export const getInitializeData = (params: {
 }): any =>
   ethers.utils.defaultAbiCoder.encode(
     ["address", "string", "string"],
-    [
-      params.managerAddress,
-      params.name,
-      params.symbol,
-    ]
+    [params.managerAddress, params.name, params.symbol]
   );
 
 export const bn = (value: any) => ethers.BigNumber.from(value);

@@ -2,7 +2,7 @@
 pragma solidity 0.8.4;
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IAlgebraPool} from "./algebra/core/contracts/interfaces/IAlgebraPool.sol";
 
 /**
  * @notice RangeProtocolVaultStorage a storage contract for RangeProtocolVault
@@ -14,7 +14,7 @@ abstract contract RangeProtocolVaultStorage {
     bool public mintStarted;
 
     int24 public tickSpacing;
-    IUniswapV3Pool public pool;
+    IAlgebraPool public pool;
     IERC20Upgradeable public token0;
     IERC20Upgradeable public token1;
 

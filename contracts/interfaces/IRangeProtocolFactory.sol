@@ -8,7 +8,6 @@ interface IRangeProtocolFactory {
     function createVault(
         address tokenA,
         address tokenB,
-        uint24 fee,
         address implementation,
         bytes memory configData
     ) external;
