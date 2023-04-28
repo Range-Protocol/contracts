@@ -14,7 +14,7 @@ library TickMath {
     uint160 internal constant MIN_SQRT_RATIO = 4295128739;
     /// @dev The maximum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MAX_TICK)
     uint160 internal constant MAX_SQRT_RATIO =
-    1461446703485210103287273052203988822378723970342;
+        1461446703485210103287273052203988822378723970342;
 
     /// @notice Calculates sqrt(1.0001^tick) * 2^96
     /// @dev Throws if |tick| > max tick
@@ -22,20 +22,20 @@ library TickMath {
     /// @return sqrtPriceX96 A Fixed point Q64.96 number representing the sqrt of the ratio of the two assets (token1/token0)
     /// at the given tick
     function getSqrtRatioAtTick(int24 tick)
-    internal
-    pure
-    returns (uint160 sqrtPriceX96)
+        internal
+        pure
+        returns (uint160 sqrtPriceX96)
     {
         uint256 absTick =
-        tick < 0 ? uint256(-int256(tick)) : uint256(int256(tick));
+            tick < 0 ? uint256(-int256(tick)) : uint256(int256(tick));
 
         // EDIT: 0.8 compatibility
         require(absTick <= uint256(int256(MAX_TICK)), "T");
 
         uint256 ratio =
-        absTick & 0x1 != 0
-        ? 0xfffcb933bd6fad37aa2d162d1a594001
-        : 0x100000000000000000000000000000000;
+            absTick & 0x1 != 0
+                ? 0xfffcb933bd6fad37aa2d162d1a594001
+                : 0x100000000000000000000000000000000;
         if (absTick & 0x2 != 0)
             ratio = (ratio * 0xfff97272373d413259a46990580e213a) >> 128;
         if (absTick & 0x4 != 0)
@@ -91,9 +91,9 @@ library TickMath {
     /// @param sqrtPriceX96 The sqrt ratio for which to compute the tick as a Q64.96
     /// @return tick The greatest tick for which the ratio is less than or equal to the input ratio
     function getTickAtSqrtRatio(uint160 sqrtPriceX96)
-    internal
-    pure
-    returns (int24 tick)
+        internal
+        pure
+        returns (int24 tick)
     {
         // second inequality must be < because the price can never reach the price at the max tick
         require(
@@ -237,18 +237,18 @@ library TickMath {
         int256 log_sqrt10001 = log_2 * 255738958999603826347141; // 128.128 number
 
         int24 tickLow =
-        int24(
-            (log_sqrt10001 - 3402992956809132418596140100660247210) >> 128
-        );
+            int24(
+                (log_sqrt10001 - 3402992956809132418596140100660247210) >> 128
+            );
         int24 tickHi =
-        int24(
-            (log_sqrt10001 + 291339464771989622907027621153398088495) >> 128
-        );
+            int24(
+                (log_sqrt10001 + 291339464771989622907027621153398088495) >> 128
+            );
 
         tick = tickLow == tickHi
-        ? tickLow
-        : getSqrtRatioAtTick(tickHi) <= sqrtPriceX96
-        ? tickHi
-        : tickLow;
+            ? tickLow
+            : getSqrtRatioAtTick(tickHi) <= sqrtPriceX96
+            ? tickHi
+            : tickLow;
     }
 }
