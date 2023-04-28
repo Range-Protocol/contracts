@@ -42,7 +42,10 @@ const upperTick = 880000;
 describe("RangeProtocolVault", () => {
   before(async () => {
     [manager, nonManager, user2, newManager] = await ethers.getSigners();
-    pancakeV3Pool = (await ethers.getContractAt("IPancakeV3Factory", "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865")) as IPancakeV3Factory;
+    pancakeV3Pool = (await ethers.getContractAt(
+      "IPancakeV3Factory",
+      "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+    )) as IPancakeV3Factory;
 
     const RangeProtocolFactory = await ethers.getContractFactory(
       "RangeProtocolFactory"
@@ -100,6 +103,12 @@ describe("RangeProtocolVault", () => {
   beforeEach(async () => {
     await token0.approve(vault.address, amount0.mul(bn(2)));
     await token1.approve(vault.address, amount1.mul(bn(2)));
+  });
+
+  it("should not reinitialize the vault", async () => {
+    await expect(
+      vault.initialize(pancakeV3Pool.address, 1, "0x")
+    ).to.be.revertedWith("Initializable: contract is already initialized");
   });
 
   it("should not mint when vault is not initialized", async () => {
