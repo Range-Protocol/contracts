@@ -18,11 +18,11 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         bytes4(keccak256(bytes("initialize(address,int24,bytes)")));
 
     bytes4 public constant UPGRADE_SELECTOR = bytes4(keccak256(bytes("upgradeTo(address)")));
+    int24 public constant TICK_SPACING = 60;
 
     /// @notice Algebra Finance factory
     address public immutable factory;
 
-    int24 public constant tickSpacing = 60;
 
     /// @notice all deployed vault instances
     address[] private _vaultsList;
@@ -115,7 +115,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         vault = address(
             new ERC1967Proxy(
                 implementation,
-                abi.encodeWithSelector(INIT_SELECTOR, pool, tickSpacing, data)
+                abi.encodeWithSelector(INIT_SELECTOR, pool, TICK_SPACING, data)
             )
         );
         _vaultsList.push(vault);
