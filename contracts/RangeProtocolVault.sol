@@ -541,6 +541,13 @@ contract RangeProtocolVault is
     }
 
     /**
+     * @dev returns the length of users array.
+     */
+    function userCount() external view returns(uint256) {
+        return users.length;
+    }
+
+    /**
      * @notice getPositionID returns the position id of the vault in uniswap pool
      * @return positionID position id of the vault in uniswap pool
      */

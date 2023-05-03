@@ -209,6 +209,7 @@ describe("RangeProtocolVault", () => {
     expect(userVault.user).to.be.equal(manager.address);
     expect(userVault.token0).to.be.equal(_amount0);
     expect(userVault.token1).to.be.equal(_amount1);
+    expect(await vault.userCount()).to.be.equal(1);
   });
 
   it("should mint with non zero totalSupply", async () => {
@@ -243,6 +244,7 @@ describe("RangeProtocolVault", () => {
     expect(userVault.user).to.be.equal(manager.address);
     expect(userVault.token0).to.be.equal(userVault0Before.add(_amount0));
     expect(userVault.token1).to.be.equal(userVault1Before.add(_amount1));
+    expect(await vault.userCount()).to.be.equal(1);
   });
 
   it("should not burn non existing vault shares", async () => {
