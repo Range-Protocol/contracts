@@ -19,8 +19,6 @@ import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
 import {VaultErrors} from "./errors/VaultErrors.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @dev Mars@RangeProtocol
  * @notice RangeProtocolVault is fungible vault shares contract that accepts uniswap pool tokens for liquidity
