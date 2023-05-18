@@ -625,7 +625,7 @@ contract RangeProtocolVault is
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
         super._beforeTokenTransfer(from, to, amount);
 
-        // if for mint and burn the user vaults adjustment are handled in the respective functions
+        // for mint and burn the user vaults adjustment are handled in the respective functions
         if (from == address(0x0) || to == address(0x0)) return;
         if (!userVaults[to].exists) {
             userVaults[to].exists = true;
