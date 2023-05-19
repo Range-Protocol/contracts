@@ -618,6 +618,9 @@ contract RangeProtocolVault is
     }
 
     /**
+     * @notice The userVault mapping is updated before the vault share tokens are transferred between the users.
+     * The data from this mapping is used by off-chain strategy manager. The data in this mapping does not impact
+     * the on-chain behaviour of vault or users' funds.
      * @dev transfers userVault amounts based on the transferring user vault shares
      * @param from address to transfer userVault amount from
      * @param to address to transfer userVault amount to
