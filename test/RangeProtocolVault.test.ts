@@ -245,6 +245,19 @@ describe("RangeProtocolVault", () => {
     expect(userVault.token0).to.be.equal(userVault0Before.add(_amount0));
     expect(userVault.token1).to.be.equal(userVault1Before.add(_amount1));
     expect(await vault.userCount()).to.be.equal(1);
+
+    const { amount0Current, amount1Current } =
+      await vault.getUnderlyingBalances();
+    const shares = await vault.balanceOf(manager.address);
+    const totalShares = await vault.totalSupply();
+    const expectedAmount0 = shares.mul(amount0Current).div(totalShares);
+    const expectedAmount1 = shares.mul(amount1Current).div(totalShares);
+
+    const { amount0: amount0Got, amount1: amount1Got } =
+      await vault.getUnderlyingBalancesByShare(shares);
+
+    expect(amount0Got).to.be.equal(expectedAmount0);
+    expect(amount1Got).to.be.equal(expectedAmount1);
   });
 
   it("should not burn non existing vault shares", async () => {
