@@ -543,7 +543,7 @@ contract RangeProtocolVault is
     /**
      * @dev returns the length of users array.
      */
-    function userCount() external view returns(uint256) {
+    function userCount() external view returns (uint256) {
         return users.length;
     }
 
@@ -572,17 +572,15 @@ contract RangeProtocolVault is
         return _getUnderlyingBalances(sqrtRatioX96, tick);
     }
 
-    function getUnderlyingBalancesByShare(uint256 shares)
-        external
-        view
-        returns(uint256 amount0, uint256 amount1)
-    {
+    function getUnderlyingBalancesByShare(
+        uint256 shares
+    ) external view returns (uint256 amount0, uint256 amount1) {
         uint256 _totalSupply = totalSupply();
         if (_totalSupply != 0) {
             // getUnderlyingBalances already applies performanceFee
             (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-            amount0 = shares * amount0Current / _totalSupply;
-            amount1 = shares * amount1Current / _totalSupply;
+            amount0 = (shares * amount0Current) / _totalSupply;
+            amount1 = (shares * amount1Current) / _totalSupply;
             // apply managing fee
             (amount0, amount1) = _netManagingFees(amount0, amount1);
         }
