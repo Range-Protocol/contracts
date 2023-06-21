@@ -364,6 +364,8 @@ contract RangeProtocolVault is
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
         _validateTicks(newLowerTick, newUpperTick);
+        if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
+
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 baseLiquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
@@ -381,14 +383,6 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
-            // Should return remaining token number for swap
-            remainingAmount0 = amount0 - amountDeposited0;
-            remainingAmount1 = amount1 - amountDeposited1;
-            if (lowerTick != newLowerTick || upperTick != newUpperTick) {
-                lowerTick = newLowerTick;
-                upperTick = newUpperTick;
-                emit TicksSet(newLowerTick, newUpperTick);
-            }
 
             emit LiquidityAdded(
                 baseLiquidity,
@@ -397,9 +391,14 @@ contract RangeProtocolVault is
                 amountDeposited0,
                 amountDeposited1
             );
-        }
-        // This check is added to not update inThePosition state in case manager decides to add liquidity in smaller chunks.
-        if (!inThePosition) {
+
+            // Should return remaining token number for swap
+            remainingAmount0 = amount0 - amountDeposited0;
+            remainingAmount1 = amount1 - amountDeposited1;
+            lowerTick = newLowerTick;
+            upperTick = newUpperTick;
+            emit TicksSet(newLowerTick, newUpperTick);
+
             inThePosition = true;
             emit InThePositionStatusSet(true);
         }
