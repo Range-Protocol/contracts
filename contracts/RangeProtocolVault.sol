@@ -251,21 +251,14 @@ contract RangeProtocolVault is
             _applyPerformanceFee(fee0, fee1);
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
             emit FeesEarned(fee0, fee1);
-            amount0 =
-                burn0 +
-                FullMath.mulDiv(
-                    token0.balanceOf(address(this)) - burn0 - managerBalance0,
-                    burnAmount,
-                    totalSupply
-                );
 
-            amount1 =
-                burn1 +
-                FullMath.mulDiv(
-                    token1.balanceOf(address(this)) - burn1 - managerBalance1,
-                    burnAmount,
-                    totalSupply
-                );
+            uint256 passiveBalance0 = token0.balanceOf(address(this)) - burn0;
+            uint256 passiveBalance1 = token1.balanceOf(address(this)) - burn1;
+            if (passiveBalance0 > managerBalance0) passiveBalance0 -= managerBalance0;
+            if (passiveBalance1 > managerBalance1) passiveBalance1 -= managerBalance1;
+
+            amount0 = burn0 + FullMath.mulDiv(passiveBalance0, burnAmount, totalSupply);
+            amount1 = burn1 + FullMath.mulDiv(passiveBalance1, burnAmount, totalSupply);
         } else {
             (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
             amount0 = FullMath.mulDiv(amount0Current, burnAmount, totalSupply);
@@ -619,8 +612,14 @@ contract RangeProtocolVault is
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
         }
 
-        amount0Current += fee0 + token0.balanceOf(address(this)) - managerBalance0;
-        amount1Current += fee1 + token1.balanceOf(address(this)) - managerBalance1;
+        uint256 passiveBalance0 = fee0 + token0.balanceOf(address(this));
+        uint256 passiveBalance1 = fee1 + token1.balanceOf(address(this));
+        amount0Current += passiveBalance0 > managerBalance0
+            ? passiveBalance0 - managerBalance0
+            : passiveBalance0;
+        amount1Current += passiveBalance1 > managerBalance1
+            ? passiveBalance1 - managerBalance1
+            : passiveBalance1;
     }
 
     /**
@@ -629,6 +628,39 @@ contract RangeProtocolVault is
      */
     function _authorizeUpgrade(address) internal override {
         if (msg.sender != factory) revert VaultErrors.OnlyFactoryAllowed();
+    }
+
+    /**
+     * @notice The userVault mapping is updated before the vault share tokens are transferred between the users.
+     * The data from this mapping is used by off-chain strategy manager. The data in this mapping does not impact
+     * the on-chain behaviour of vault or users' funds.
+     * @dev transfers userVault amounts based on the transferring user vault shares
+     * @param from address to transfer userVault amount from
+     * @param to address to transfer userVault amount to
+     */
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+        super._beforeTokenTransfer(from, to, amount);
+
+        // for mint and burn the user vaults adjustment are handled in the respective functions
+        if (from == address(0x0) || to == address(0x0)) return;
+        if (!userVaults[to].exists) {
+            userVaults[to].exists = true;
+            users.push(to);
+        }
+        uint256 senderBalance = balanceOf(from);
+        uint256 token0Amount = userVaults[from].token0 -
+            (userVaults[from].token0 * (senderBalance - amount)) /
+            senderBalance;
+
+        uint256 token1Amount = userVaults[from].token1 -
+            (userVaults[from].token1 * (senderBalance - amount)) /
+            senderBalance;
+
+        userVaults[from].token0 -= token0Amount;
+        userVaults[from].token1 -= token1Amount;
+
+        userVaults[to].token0 += token0Amount;
+        userVaults[to].token1 += token1Amount;
     }
 
     /**
