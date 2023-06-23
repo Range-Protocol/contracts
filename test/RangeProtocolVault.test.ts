@@ -245,6 +245,52 @@ describe("RangeProtocolVault", () => {
     expect(userVault.token0).to.be.equal(userVault0Before.add(_amount0));
     expect(userVault.token1).to.be.equal(userVault1Before.add(_amount1));
     expect(await vault.userCount()).to.be.equal(1);
+
+    const { amount0Current, amount1Current } =
+      await vault.getUnderlyingBalances();
+    const shares = await vault.balanceOf(manager.address);
+    const totalShares = await vault.totalSupply();
+    const expectedAmount0 = shares.mul(amount0Current).div(totalShares);
+    const expectedAmount1 = shares.mul(amount1Current).div(totalShares);
+
+    const { amount0: amount0Got, amount1: amount1Got } =
+      await vault.getUnderlyingBalancesByShare(shares);
+
+    expect(amount0Got).to.be.equal(expectedAmount0);
+    expect(amount1Got).to.be.equal(expectedAmount1);
+  });
+
+  it("should transfer vault shares to user2", async () => {
+    const userBalance = await vault.balanceOf(manager.address);
+    const transferAmount = ethers.utils.parseEther("1");
+    const userVault0 = (await vault.userVaults(manager.address)).token0;
+    const userVault1 = (await vault.userVaults(manager.address)).token1;
+
+    const vault0Moved = userVault0.sub(userVault0.mul(userBalance.sub(transferAmount)).div(userBalance));
+    const vault1Moved = userVault1.sub(userVault1.mul(userBalance.sub(transferAmount)).div(userBalance));
+    await vault.transfer(user2.address, transferAmount);
+
+    let userVaults = (await vault.getUserVaults(0, 2));
+    expect(userVaults[0].user).to.be.equal(manager.address);
+    expect(userVaults[0].token0).to.be.equal(userVault0.sub(vault0Moved));
+    expect(userVaults[0].token1).to.be.equal(userVault1.sub(vault1Moved));
+    expect(await vault.userCount()).to.be.equal(2);
+
+    expect(userVaults[1].user).to.be.equal(user2.address);
+    expect(userVaults[1].token0).to.be.equal(vault0Moved);
+    expect(userVaults[1].token1).to.be.equal(vault1Moved);
+
+    const user2Balance = await vault.balanceOf(user2.address);
+    const user2Vault0 = (await vault.userVaults(user2.address)).token0;
+    const user2Vault1 = (await vault.userVaults(user2.address)).token1;
+    await vault.connect(user2).transfer(manager.address, user2Balance);
+
+    userVaults = (await vault.getUserVaults(0, 2));
+    expect(userVaults[0].token0).to.be.equal(userVault0);
+    expect(userVaults[0].token1).to.be.equal(userVault1);
+
+    expect(userVaults[1].token0).to.be.equal(bn(0));
+    expect(userVaults[1].token1).to.be.equal(bn(0));
   });
 
   it("should not burn non existing vault shares", async () => {
