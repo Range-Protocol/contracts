@@ -617,6 +617,39 @@ contract RangeProtocolVault is
     }
 
     /**
+     * @notice The userVault mapping is updated before the vault share tokens are transferred between the users.
+     * The data from this mapping is used by off-chain strategy manager. The data in this mapping does not impact
+     * the on-chain behaviour of vault or users' funds.
+     * @dev transfers userVault amounts based on the transferring user vault shares
+     * @param from address to transfer userVault amount from
+     * @param to address to transfer userVault amount to
+     */
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+        super._beforeTokenTransfer(from, to, amount);
+
+        // for mint and burn the user vaults adjustment are handled in the respective functions
+        if (from == address(0x0) || to == address(0x0)) return;
+        if (!userVaults[to].exists) {
+            userVaults[to].exists = true;
+            users.push(to);
+        }
+        uint256 senderBalance = balanceOf(from);
+        uint256 token0Amount = userVaults[from].token0 -
+            (userVaults[from].token0 * (senderBalance - amount)) /
+            senderBalance;
+
+        uint256 token1Amount = userVaults[from].token1 -
+            (userVaults[from].token1 * (senderBalance - amount)) /
+            senderBalance;
+
+        userVaults[from].token0 -= token0Amount;
+        userVaults[from].token1 -= token1Amount;
+
+        userVaults[to].token0 += token0Amount;
+        userVaults[to].token1 += token1Amount;
+    }
+
+    /**
      * @notice _withdraw internal function to withdraw liquidity from uniswap pool
      * @param liquidity liquidity to remove from the uniswap pool
      */
