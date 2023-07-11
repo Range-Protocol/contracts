@@ -511,6 +511,17 @@ describe("RangeProtocolVault", () => {
         .to.emit(vault, "InThePositionStatusSet")
         .withArgs(true);
     });
+
+    it("should not add liquidity when in the position", async () => {
+      const { amount0Current, amount1Current } =
+        await vault.getUnderlyingBalances();
+
+      await vault.addLiquidity(bottomTick, topTick, amount0Current, amount1Current);
+
+      await expect(
+        vault.addLiquidity(bottomTick, topTick, amount0Current, amount1Current)
+      ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
+    });
   });
 
   describe("Fee collection", () => {

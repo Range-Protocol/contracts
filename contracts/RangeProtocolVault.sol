@@ -357,6 +357,8 @@ contract RangeProtocolVault is
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
         _validateTicks(newBottomTick, newTopTick);
+        if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
+
         (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
         uint128 baseLiquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
@@ -375,14 +377,6 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
-            // Should return remaining token number for swap
-            remainingAmount0 = amount0 - amountDeposited0;
-            remainingAmount1 = amount1 - amountDeposited1;
-            if (bottomTick != newBottomTick || topTick != newTopTick) {
-                bottomTick = newBottomTick;
-                topTick = newTopTick;
-                emit TicksSet(newBottomTick, newTopTick);
-            }
 
             emit LiquidityAdded(
                 baseLiquidity,
@@ -391,9 +385,14 @@ contract RangeProtocolVault is
                 amountDeposited0,
                 amountDeposited1
             );
-        }
-        // This check is added to not update inThePosition state in case manager decides to add liquidity in smaller chunks.
-        if (!inThePosition) {
+
+            // Should return remaining token number for swap
+            remainingAmount0 = amount0 - amountDeposited0;
+            remainingAmount1 = amount1 - amountDeposited1;
+            bottomTick = newBottomTick;
+            topTick = newTopTick;
+            emit TicksSet(newBottomTick, newTopTick);
+
             inThePosition = true;
             emit InThePositionStatusSet(true);
         }
@@ -543,39 +542,6 @@ contract RangeProtocolVault is
     }
 
     /**
-     * @notice The userVault mapping is updated before the vault share tokens are transferred between the users.
-     * The data from this mapping is used by off-chain strategy manager. The data in this mapping does not impact
-     * the on-chain behaviour of vault or users' funds.
-     * @dev transfers userVault amounts based on the transferring user vault shares
-     * @param from address to transfer userVault amount from
-     * @param to address to transfer userVault amount to
-     */
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
-        super._beforeTokenTransfer(from, to, amount);
-
-        // if for mint and burn the user vaults adjustment are handled in the respective functions
-        if (from == address(0x0) || to == address(0x0)) return;
-        if (!userVaults[to].exists) {
-            userVaults[to].exists = true;
-            users.push(to);
-        }
-        uint256 senderBalance = balanceOf(from);
-        uint256 token0Amount = userVaults[from].token0 -
-            (userVaults[from].token0 * (senderBalance - amount)) /
-            senderBalance;
-
-        uint256 token1Amount = userVaults[from].token1 -
-            (userVaults[from].token1 * (senderBalance - amount)) /
-            senderBalance;
-
-        userVaults[from].token0 -= token0Amount;
-        userVaults[from].token1 -= token1Amount;
-
-        userVaults[to].token0 += token0Amount;
-        userVaults[to].token1 += token1Amount;
-    }
-
-    /**
      * @notice getPositionID returns the position id of the vault in algebra pool
      * @return positionID position id of the vault in algebra pool
      */
@@ -606,6 +572,20 @@ contract RangeProtocolVault is
     {
         (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.globalState();
         return _getUnderlyingBalances(sqrtRatioX96, tick);
+    }
+
+    function getUnderlyingBalancesByShare(
+        uint256 shares
+    ) external view returns (uint256 amount0, uint256 amount1) {
+        uint256 _totalSupply = totalSupply();
+        if (_totalSupply != 0) {
+            // getUnderlyingBalances already applies performanceFee
+            (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
+            amount0 = (shares * amount0Current) / _totalSupply;
+            amount1 = (shares * amount1Current) / _totalSupply;
+            // apply managing fee
+            (amount0, amount1) = _netManagingFees(amount0, amount1);
+        }
     }
 
     /**
@@ -658,6 +638,39 @@ contract RangeProtocolVault is
      */
     function _authorizeUpgrade(address) internal override {
         if (msg.sender != factory) revert VaultErrors.OnlyFactoryAllowed();
+    }
+
+    /**
+     * @notice The userVault mapping is updated before the vault share tokens are transferred between the users.
+     * The data from this mapping is used by off-chain strategy manager. The data in this mapping does not impact
+     * the on-chain behaviour of vault or users' funds.
+     * @dev transfers userVault amounts based on the transferring user vault shares
+     * @param from address to transfer userVault amount from
+     * @param to address to transfer userVault amount to
+     */
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+        super._beforeTokenTransfer(from, to, amount);
+
+        // for mint and burn the user vaults adjustment are handled in the respective functions
+        if (from == address(0x0) || to == address(0x0)) return;
+        if (!userVaults[to].exists) {
+            userVaults[to].exists = true;
+            users.push(to);
+        }
+        uint256 senderBalance = balanceOf(from);
+        uint256 token0Amount = userVaults[from].token0 -
+            (userVaults[from].token0 * (senderBalance - amount)) /
+            senderBalance;
+
+        uint256 token1Amount = userVaults[from].token1 -
+            (userVaults[from].token1 * (senderBalance - amount)) /
+            senderBalance;
+
+        userVaults[from].token0 -= token0Amount;
+        userVaults[from].token1 -= token1Amount;
+
+        userVaults[to].token0 += token0Amount;
+        userVaults[to].token1 += token1Amount;
     }
 
     /**
