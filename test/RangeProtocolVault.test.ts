@@ -429,15 +429,15 @@ describe.only("RangeProtocolVault", () => {
     // expect(await token1.balanceOf(manager.address)).to.be.equal(
     //   userBalance1Before.add(amount1Got)
     // );
-    // expect((await vault.userVaults(manager.address)).token0).to.be.equal(
-    //   userVault0Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
-    // );
-    // expect((await vault.userVaults(manager.address)).token1).to.be.equal(
-    //   userVault1Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
-    // );
-    //
-    // expect(await vault.managerBalance0()).to.be.equal(managingFee0);
-    // expect(await vault.managerBalance1()).to.be.equal(managingFee1);
+    expect((await vault.userVaults(manager.address)).token0).to.be.equal(
+      userVault0Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
+    );
+    expect((await vault.userVaults(manager.address)).token1).to.be.equal(
+      userVault1Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
+    );
+
+    expect(await vault.managerBalance0()).to.be.equal(managingFee0);
+    expect(await vault.managerBalance1()).to.be.equal(managingFee1);
     // console.log(ethers.utils.formatEther(managingFee0), ethers.utils.formatEther(managingFee1))
     // 0.019999999999999999 0.019999999999999999
   });
