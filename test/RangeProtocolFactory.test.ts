@@ -8,6 +8,7 @@ import {
   IPancakeV3Pool,
   RangeProtocolVault,
   RangeProtocolFactory,
+  NativeTokenSupport,
 } from "../typechain";
 import { bn, getInitializeData, ZERO_ADDRESS } from "./common";
 import { Contract } from "ethers";
@@ -16,6 +17,7 @@ let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
 let pancakeV3Factory: IPancakeV3Factory;
 let pancakev3Pool: IPancakeV3Pool;
+let nativeTokenSupport: NativeTokenSupport;
 let token0: IERC20;
 let token1: IERC20;
 let owner: SignerWithAddress;
@@ -29,7 +31,10 @@ let initializeData: any;
 describe("RangeProtocolFactory", () => {
   before(async function () {
     [owner, nonOwner, newOwner] = await ethers.getSigners();
-    pancakeV3Factory = (await ethers.getContractAt("IPancakeV3Factory", "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865")) as IPancakeV3Factory;
+    pancakeV3Factory = (await ethers.getContractAt(
+      "IPancakeV3Factory",
+      "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+    )) as IPancakeV3Factory;
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const RangeProtocolFactory = await ethers.getContractFactory(
@@ -56,9 +61,18 @@ describe("RangeProtocolFactory", () => {
       await pancakeV3Factory.getPool(token0.address, token1.address, poolFee)
     )) as IPancakeV3Pool;
 
+    const NativeTokenSupport = await ethers.getContractFactory(
+      "NativeTokenSupport"
+    );
+    nativeTokenSupport = await NativeTokenSupport.deploy();
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const RangeProtocolVault = await ethers.getContractFactory(
-      "RangeProtocolVault"
+      "RangeProtocolVault",
+      {
+        libraries: {
+          NativeTokenSupport: nativeTokenSupport.address,
+        },
+      }
     );
     vaultImpl = (await RangeProtocolVault.deploy()) as RangeProtocolVault;
 

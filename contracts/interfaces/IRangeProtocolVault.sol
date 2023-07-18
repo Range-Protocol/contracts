@@ -42,9 +42,15 @@ interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback 
 
     function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
-    function mint(uint256 mintAmount) external returns (uint256 amount0, uint256 amount1);
+    function mint(
+        uint256 mintAmount,
+        bool depositNative
+    ) external payable returns (uint256 amount0, uint256 amount1);
 
-    function burn(uint256 burnAmount) external returns (uint256 amount0, uint256 amount1);
+    function burn(
+        uint256 burnAmount,
+        bool withdrawNative
+    ) external returns (uint256 amount0, uint256 amount1);
 
     function removeLiquidity() external;
 

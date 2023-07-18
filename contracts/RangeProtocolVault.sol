@@ -17,6 +17,7 @@ import {FullMath} from "./pancake/FullMath.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
 import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
+import {NativeTokenSupport} from "./libraries/NativeTokenSupport.sol";
 import {VaultErrors} from "./errors/VaultErrors.sol";
 
 /**
@@ -58,6 +59,8 @@ contract RangeProtocolVault is
     constructor() {
         _disableInitializers();
     }
+
+    receive() external payable {}
 
     /**
      * @notice initialize initializes the vault contract and is called right after proxy deployment
@@ -169,8 +172,16 @@ contract RangeProtocolVault is
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
-        uint256 mintAmount
-    ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
+        uint256 mintAmount,
+        bool depositNative
+    )
+        external
+        payable
+        override
+        nonReentrant
+        whenNotPaused
+        returns (uint256 amount0, uint256 amount1)
+    {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
         uint256 totalSupply = totalSupply();
@@ -200,18 +211,15 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
-        if (!userVaults[msg.sender].exists) {
-            userVaults[msg.sender].exists = true;
-            users.push(msg.sender);
-        }
-        if (amount0 > 0) {
-            userVaults[msg.sender].token0 += amount0;
-            token0.safeTransferFrom(msg.sender, address(this), amount0);
-        }
-        if (amount1 > 0) {
-            userVaults[msg.sender].token1 += amount1;
-            token1.safeTransferFrom(msg.sender, address(this), amount1);
-        }
+        NativeTokenSupport.acceptUserDeposit(
+            userVaults[msg.sender],
+            users,
+            depositNative,
+            token0,
+            token1,
+            amount0,
+            amount1
+        );
 
         _mint(msg.sender, mintAmount);
         if (_inThePosition) {
@@ -235,13 +243,34 @@ contract RangeProtocolVault is
      * @return amount1 amount of token1 transferred to msg.sender for burning {burnAmount}
      */
     function burn(
-        uint256 burnAmount
+        uint256 burnAmount,
+        bool withdrawNative
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
-        uint256 totalSupply = totalSupply();
+        (amount0, amount1) = getRawWithdrawAmounts(burnAmount);
         uint256 balanceBefore = balanceOf(msg.sender);
         _burn(msg.sender, burnAmount);
 
+        _applyManagingFee(amount0, amount1);
+        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
+        NativeTokenSupport.redeemUserDeposit(
+            userVaults[msg.sender],
+            withdrawNative,
+            burnAmount,
+            balanceBefore,
+            token0,
+            token1,
+            amount0,
+            amount1
+        );
+
+        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
+    }
+
+    function getRawWithdrawAmounts(
+        uint256 burnAmount
+    ) private returns (uint256 amount0, uint256 amount1) {
+        uint256 totalSupply = totalSupply();
         if (inThePosition) {
             (uint128 liquidity, , , , ) = pool.positions(getPositionID());
             uint256 liquidityBurned_ = FullMath.mulDiv(burnAmount, liquidity, totalSupply);
@@ -264,23 +293,6 @@ contract RangeProtocolVault is
             amount0 = FullMath.mulDiv(amount0Current, burnAmount, totalSupply);
             amount1 = FullMath.mulDiv(amount1Current, burnAmount, totalSupply);
         }
-
-        _applyManagingFee(amount0, amount1);
-        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
-        if (amount0 > 0) {
-            userVaults[msg.sender].token0 =
-                (userVaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
-                balanceBefore;
-            token0.safeTransfer(msg.sender, amount0AfterFee);
-        }
-        if (amount1 > 0) {
-            userVaults[msg.sender].token1 =
-                (userVaults[msg.sender].token1 * (balanceBefore - burnAmount)) /
-                balanceBefore;
-            token1.safeTransfer(msg.sender, amount1AfterFee);
-        }
-
-        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
     }
 
     /**
@@ -535,7 +547,7 @@ contract RangeProtocolVault is
     /**
      * @dev returns the length of users array.
      */
-    function userCount() external view returns(uint256) {
+    function userCount() external view returns (uint256) {
         return users.length;
     }
 
