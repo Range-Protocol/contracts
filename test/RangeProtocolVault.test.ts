@@ -250,6 +250,37 @@ describe.only("RangeProtocolVault", () => {
     expect(await vault.userCount()).to.be.equal(1);
   });
 
+  it("should not accept native tokens when deposit is non native", async () => {
+    const {
+      mintAmount,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount0: _amount0,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount1: _amount1,
+    } = await vault.getMintAmounts(amount0, amount1);
+
+    await expect(
+      vault.mint(mintAmount, false, { value: _amount1 })
+    ).to.be.revertedWithCustomError(nativeTokenSupport, "NativeTokenSent");
+  });
+
+  it("should not mint when less than required native token is supplied", async () => {
+    const {
+      mintAmount,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount0: _amount0,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount1: _amount1,
+    } = await vault.getMintAmounts(amount0, amount1);
+
+    await expect(
+      vault.mint(mintAmount, true, { value: _amount1.div(2) })
+    ).to.be.revertedWithCustomError(
+      nativeTokenSupport,
+      "InsufficientNativeTokenAmount"
+    );
+  });
+
   it("should mint with native tokens", async () => {
     const {
       mintAmount,
@@ -420,365 +451,364 @@ describe.only("RangeProtocolVault", () => {
       amount1: _amount1,
     } = await vault.getMintAmounts(amount0, amount1);
 
-    await vault.mint(mintAmount, true, { value: _amount1 })
+    await vault.mint(mintAmount, true, { value: _amount1 });
     const burnAmount = await vault.balanceOf(manager.address);
 
-    console.log((await ethers.provider.getBalance(manager.address)).toString())
+    console.log((await ethers.provider.getBalance(manager.address)).toString());
     await vault.burn(burnAmount, true);
-    console.log((await ethers.provider.getBalance(manager.address)).toString())
-
+    console.log((await ethers.provider.getBalance(manager.address)).toString());
   });
 
-  // it("should not add liquidity when total supply is zero and vault is out of the pool", async () => {
-  //   const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-  //   await vault.mint(mintAmount, false);
-  //   await vault.removeLiquidity();
-  //   await vault.burn(await vault.balanceOf(manager.address), false);
-  //
-  //   await expect(vault.mint(mintAmount, false)).to.be.revertedWithCustomError(
-  //     vault,
-  //     "MintNotAllowed"
-  //   );
-  // });
-  //
-  // describe("Manager Fee", () => {
-  //   it("should not update managing and performance fee by non manager", async () => {
-  //     await expect(
-  //       vault.connect(nonManager).updateFees(100, 1000)
-  //     ).to.be.revertedWith("Ownable: caller is not the manager");
-  //   });
-  //
-  //   it("should not update managing fee above BPS", async () => {
-  //     await expect(vault.updateFees(101, 100)).to.be.revertedWithCustomError(
-  //       vault,
-  //       "InvalidManagingFee"
-  //     );
-  //   });
-  //
-  //   it("should not update performance fee above BPS", async () => {
-  //     await expect(vault.updateFees(100, 10001)).to.be.revertedWithCustomError(
-  //       vault,
-  //       "InvalidPerformanceFee"
-  //     );
-  //   });
-  //
-  //   it("should update manager and performance fee by manager", async () => {
-  //     await expect(vault.updateFees(100, 300))
-  //       .to.emit(vault, "FeesUpdated")
-  //       .withArgs(100, 300);
-  //   });
-  // });
-  //
-  // describe("Remove Liquidity", () => {
-  //   before(async () => {
-  //     await vault.updateTicks(lowerTick, upperTick);
-  //   });
-  //
-  //   beforeEach(async () => {
-  //     await token0.approve(vault.address, amount0.mul(bn(2)));
-  //     await token1.approve(vault.address, amount1.mul(bn(2)));
-  //     const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-  //     await vault.mint(mintAmount, false);
-  //   });
-  //
-  //   it("should not remove liquidity by non-manager", async () => {
-  //     await expect(
-  //       vault.connect(nonManager).removeLiquidity()
-  //     ).to.be.revertedWith("Ownable: caller is not the manager");
-  //   });
-  //
-  //   it("should remove liquidity by manager", async () => {
-  //     expect(await vault.lowerTick()).to.not.be.equal(await vault.upperTick());
-  //     expect(await vault.inThePosition()).to.be.equal(true);
-  //     const { _liquidity: liquidityBefore } = await pancakev3Pool.positions(
-  //       position(vault.address, lowerTick, upperTick)
-  //     );
-  //     expect(liquidityBefore).not.to.be.equal(0);
-  //
-  //     const { fee0, fee1 } = await vault.getCurrentFees();
-  //     await expect(vault.removeLiquidity())
-  //       .to.emit(vault, "InThePositionStatusSet")
-  //       .withArgs(false)
-  //       .to.emit(vault, "FeesEarned")
-  //       .withArgs(fee0, fee1);
-  //
-  //     expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
-  //     expect(await vault.inThePosition()).to.be.equal(false);
-  //     const { _liquidity: liquidityAfter } = await pancakev3Pool.positions(
-  //       position(vault.address, lowerTick, upperTick)
-  //     );
-  //     expect(liquidityAfter).to.be.equal(0);
-  //   });
-  //
-  //   it("should burn vault shares when liquidity is removed", async () => {
-  //     const { _liquidity: liquidity } = await pancakev3Pool.positions(
-  //       position(vault.address, lowerTick, upperTick)
-  //     );
-  //
-  //     expect(liquidity).to.be.equal(0);
-  //     await expect(vault.removeLiquidity())
-  //       .to.be.emit(vault, "InThePositionStatusSet")
-  //       .withArgs(false)
-  //       .not.to.emit(vault, "FeesEarned");
-  //
-  //     const userBalance0Before = await token0.balanceOf(manager.address);
-  //     const userBalance1Before = await token1.balanceOf(manager.address);
-  //     const [amount0Current, amount1Current] =
-  //       await vault.getUnderlyingBalances();
-  //     const totalSupply = await vault.totalSupply();
-  //     const vaultShares = await vault.balanceOf(manager.address);
-  //     const managerBalance0Before = await vault.managerBalance0();
-  //     const managerBalance1Before = await vault.managerBalance1();
-  //
-  //     const managingFee = await vault.managingFee();
-  //     const userBalance0 = amount0Current.mul(vaultShares).div(totalSupply);
-  //     const managingFee0 = userBalance0.mul(managingFee).div(10_000);
-  //
-  //     const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
-  //     const managingFee1 = userBalance1.mul(managingFee).div(10_000);
-  //
-  //     await expect(vault.burn(vaultShares, false)).not.to.emit(
-  //       vault,
-  //       "FeesEarned"
-  //     );
-  //     expect(await token0.balanceOf(manager.address)).to.be.equal(
-  //       userBalance0Before.add(userBalance0)
-  //     );
-  //     expect(await token1.balanceOf(manager.address)).to.be.equal(
-  //       userBalance1Before.add(userBalance1)
-  //     );
-  //     expect(await vault.managerBalance0()).to.be.equal(
-  //       managerBalance0Before.add(managingFee0)
-  //     );
-  //     expect(await vault.managerBalance1()).to.be.equal(
-  //       managerBalance1Before.add(managingFee1)
-  //     );
-  //
-  //     // console.log(ethers.utils.formatEther(await vault.managerBalance0()), ethers.utils.formatEther(await vault.managerBalance1()))
-  //     // 0.089999999999999997 0.089999999999999997
-  //   });
-  // });
-  //
-  // describe("Add Liquidity", () => {
-  //   before(async () => {
-  //     await vault.updateTicks(lowerTick, upperTick);
-  //   });
-  //
-  //   beforeEach(async () => {
-  //     await token0.approve(vault.address, amount0.mul(bn(2)));
-  //     await token1.approve(vault.address, amount1.mul(bn(2)));
-  //     const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-  //     await vault.mint(mintAmount, false);
-  //     await vault.removeLiquidity();
-  //   });
-  //
-  //   it("should not add liquidity by non-manager", async () => {
-  //     const amount0 = await token0.balanceOf(vault.address);
-  //     const amount1 = await token1.balanceOf(vault.address);
-  //
-  //     await expect(
-  //       vault
-  //         .connect(nonManager)
-  //         .addLiquidity(lowerTick, upperTick, amount0, amount1)
-  //     ).to.be.revertedWith("Ownable: caller is not the manager");
-  //   });
-  //
-  //   it("should add liquidity by manager", async () => {
-  //     const { amount0Current, amount1Current } =
-  //       await vault.getUnderlyingBalances();
-  //
-  //     // eslint-disable-next-line @typescript-eslint/naming-convention
-  //     const MockLiquidityAmounts = await ethers.getContractFactory(
-  //       "MockLiquidityAmounts"
-  //     );
-  //     const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
-  //
-  //     const { sqrtPriceX96 } = await pancakev3Pool.slot0();
-  //     const liquidity = mockLiquidityAmounts.getLiquidityForAmounts(
-  //       sqrtPriceX96,
-  //       lowerTick,
-  //       upperTick,
-  //       amount0Current,
-  //       amount1Current
-  //     );
-  //
-  //     await expect(
-  //       vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
-  //     )
-  //       .to.emit(vault, "LiquidityAdded")
-  //       .withArgs(liquidity, lowerTick, upperTick, anyValue, anyValue)
-  //       .to.emit(vault, "InThePositionStatusSet")
-  //       .withArgs(true);
-  //   });
-  //
-  //   it("should not add liquidity when in the position", async () => {
-  //     const { amount0Current, amount1Current } =
-  //       await vault.getUnderlyingBalances();
-  //
-  //     await vault.addLiquidity(
-  //       lowerTick,
-  //       upperTick,
-  //       amount0Current,
-  //       amount1Current
-  //     );
-  //
-  //     await expect(
-  //       vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
-  //     ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
-  //   });
-  // });
-  //
-  // describe("Fee collection", () => {
-  //   it("non-manager should not collect fee", async () => {
-  //     const { sqrtPriceX96 } = await pancakev3Pool.slot0();
-  //     const liquidity = await pancakev3Pool.liquidity();
-  //     await token1.transfer(vault.address, amount1);
-  //     const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-  //     await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
-  //
-  //     const { fee0, fee1 } = await vault.getCurrentFees();
-  //     await expect(vault.pullFeeFromPool())
-  //       .to.emit(vault, "FeesEarned")
-  //       .withArgs(fee0, fee1);
-  //
-  //     await expect(
-  //       vault.connect(nonManager).collectManager()
-  //     ).to.be.revertedWith("Ownable: caller is not the manager");
-  //   });
-  //
-  //   it("should manager collect fee", async () => {
-  //     const { sqrtPriceX96 } = await pancakev3Pool.slot0();
-  //     const liquidity = await pancakev3Pool.liquidity();
-  //     await token1.transfer(vault.address, amount1);
-  //     const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-  //     await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
-  //
-  //     const { fee0, fee1 } = await vault.getCurrentFees();
-  //     await expect(vault.pullFeeFromPool())
-  //       .to.emit(vault, "FeesEarned")
-  //       .withArgs(fee0, fee1);
-  //
-  //     const managerBalance0 = await vault.managerBalance0();
-  //     const managerBalance1 = await vault.managerBalance1();
-  //
-  //     const managerBalance0Before = await token0.balanceOf(manager.address);
-  //     const managerBalance1Before = await token1.balanceOf(manager.address);
-  //     await vault.connect(manager).collectManager();
-  //
-  //     const performanceFee0 = fee0
-  //       .mul(await vault.performanceFee())
-  //       .div(10_000);
-  //     const performanceFee1 = fee0
-  //       .mul(await vault.performanceFee())
-  //       .div(10_000);
-  //
-  //     expect(await token0.balanceOf(manager.address)).to.be.equal(
-  //       managerBalance0Before.add(managerBalance0).add(performanceFee0)
-  //     );
-  //     expect(await token1.balanceOf(manager.address)).to.be.equal(
-  //       managerBalance1Before.add(managerBalance1).add(performanceFee1)
-  //     );
-  //
-  //     expect(await vault.managerBalance0()).to.be.equal(0);
-  //     expect(await vault.managerBalance1()).to.be.equal(0);
-  //   });
-  // });
-  //
-  // describe("Test Upgradeability", () => {
-  //   it("should not upgrade range vault implementation by non-manager of factory", async () => {
-  //     // eslint-disable-next-line @typescript-eslint/naming-convention
-  //     const RangeProtocolVault = await ethers.getContractFactory(
-  //       "RangeProtocolVault",
-  //       {
-  //         libraries: {
-  //           NativeTokenSupport: nativeTokenSupport.address,
-  //         },
-  //       }
-  //     );
-  //     const newVaultImpl =
-  //       (await RangeProtocolVault.deploy()) as RangeProtocolVault;
-  //
-  //     await expect(
-  //       factory
-  //         .connect(nonManager)
-  //         .upgradeVault(vault.address, newVaultImpl.address)
-  //     ).to.be.revertedWith("Ownable: caller is not the owner");
-  //
-  //     await expect(
-  //       factory
-  //         .connect(nonManager)
-  //         .upgradeVaults([vault.address], [newVaultImpl.address])
-  //     ).to.be.revertedWith("Ownable: caller is not the owner");
-  //   });
-  //
-  //   it("should upgrade range vault implementation by factory manager", async () => {
-  //     // eslint-disable-next-line @typescript-eslint/naming-convention
-  //     const RangeProtocolVault = await ethers.getContractFactory(
-  //       "RangeProtocolVault",
-  //       {
-  //         libraries: {
-  //           NativeTokenSupport: nativeTokenSupport.address,
-  //         },
-  //       }
-  //     );
-  //     const newVaultImpl =
-  //       (await RangeProtocolVault.deploy()) as RangeProtocolVault;
-  //
-  //     const implSlot = await vaultImpl.proxiableUUID();
-  //     expect(
-  //       await ethers.provider.getStorageAt(vault.address, implSlot)
-  //     ).to.be.equal(
-  //       ethers.utils.hexZeroPad(vaultImpl.address.toLowerCase(), 32)
-  //     );
-  //     await expect(factory.upgradeVault(vault.address, newVaultImpl.address))
-  //       .to.emit(factory, "VaultImplUpgraded")
-  //       .withArgs(vault.address, newVaultImpl.address);
-  //
-  //     expect(
-  //       await ethers.provider.getStorageAt(vault.address, implSlot)
-  //     ).to.be.equal(
-  //       ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
-  //     );
-  //
-  //     const newVaultImpl1 =
-  //       (await RangeProtocolVault.deploy()) as RangeProtocolVault;
-  //
-  //     expect(
-  //       await ethers.provider.getStorageAt(vault.address, implSlot)
-  //     ).to.be.equal(
-  //       ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
-  //     );
-  //     await expect(
-  //       factory.upgradeVaults([vault.address], [newVaultImpl1.address])
-  //     )
-  //       .to.emit(factory, "VaultImplUpgraded")
-  //       .withArgs(vault.address, newVaultImpl1.address);
-  //
-  //     expect(
-  //       await ethers.provider.getStorageAt(vault.address, implSlot)
-  //     ).to.be.equal(
-  //       ethers.utils.hexZeroPad(newVaultImpl1.address.toLowerCase(), 32)
-  //     );
-  //
-  //     vaultImpl = newVaultImpl1;
-  //   });
-  // });
-  //
-  // describe("transferOwnership", () => {
-  //   it("should not be able to transferOwnership by non manager", async () => {
-  //     await expect(
-  //       vault.connect(nonManager).transferOwnership(newManager.address)
-  //     ).to.be.revertedWith("Ownable: caller is not the manager");
-  //   });
-  //
-  //   it("should be able to transferOwnership by manager", async () => {
-  //     await expect(vault.transferOwnership(newManager.address))
-  //       .to.emit(vault, "OwnershipTransferred")
-  //       .withArgs(manager.address, newManager.address);
-  //     expect(await vault.manager()).to.be.equal(newManager.address);
-  //
-  //     await vault.connect(newManager).transferOwnership(manager.address);
-  //     expect(await vault.manager()).to.be.equal(manager.address);
-  //   });
-  // });
+  it("should not add liquidity when total supply is zero and vault is out of the pool", async () => {
+    const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
+    await vault.mint(mintAmount, false);
+    await vault.removeLiquidity();
+    await vault.burn(await vault.balanceOf(manager.address), false);
+
+    await expect(vault.mint(mintAmount, false)).to.be.revertedWithCustomError(
+      vault,
+      "MintNotAllowed"
+    );
+  });
+
+  describe("Manager Fee", () => {
+    it("should not update managing and performance fee by non manager", async () => {
+      await expect(
+        vault.connect(nonManager).updateFees(100, 1000)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should not update managing fee above BPS", async () => {
+      await expect(vault.updateFees(101, 100)).to.be.revertedWithCustomError(
+        vault,
+        "InvalidManagingFee"
+      );
+    });
+
+    it("should not update performance fee above BPS", async () => {
+      await expect(vault.updateFees(100, 10001)).to.be.revertedWithCustomError(
+        vault,
+        "InvalidPerformanceFee"
+      );
+    });
+
+    it("should update manager and performance fee by manager", async () => {
+      await expect(vault.updateFees(100, 300))
+        .to.emit(vault, "FeesUpdated")
+        .withArgs(100, 300);
+    });
+  });
+
+  describe("Remove Liquidity", () => {
+    before(async () => {
+      await vault.updateTicks(lowerTick, upperTick);
+    });
+
+    beforeEach(async () => {
+      await token0.approve(vault.address, amount0.mul(bn(2)));
+      await token1.approve(vault.address, amount1.mul(bn(2)));
+      const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
+      await vault.mint(mintAmount, false);
+    });
+
+    it("should not remove liquidity by non-manager", async () => {
+      await expect(
+        vault.connect(nonManager).removeLiquidity()
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should remove liquidity by manager", async () => {
+      expect(await vault.lowerTick()).to.not.be.equal(await vault.upperTick());
+      expect(await vault.inThePosition()).to.be.equal(true);
+      const { _liquidity: liquidityBefore } = await pancakev3Pool.positions(
+        position(vault.address, lowerTick, upperTick)
+      );
+      expect(liquidityBefore).not.to.be.equal(0);
+
+      const { fee0, fee1 } = await vault.getCurrentFees();
+      await expect(vault.removeLiquidity())
+        .to.emit(vault, "InThePositionStatusSet")
+        .withArgs(false)
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
+
+      expect(await vault.lowerTick()).to.be.equal(await vault.upperTick());
+      expect(await vault.inThePosition()).to.be.equal(false);
+      const { _liquidity: liquidityAfter } = await pancakev3Pool.positions(
+        position(vault.address, lowerTick, upperTick)
+      );
+      expect(liquidityAfter).to.be.equal(0);
+    });
+
+    it("should burn vault shares when liquidity is removed", async () => {
+      const { _liquidity: liquidity } = await pancakev3Pool.positions(
+        position(vault.address, lowerTick, upperTick)
+      );
+
+      expect(liquidity).to.be.equal(0);
+      await expect(vault.removeLiquidity())
+        .to.be.emit(vault, "InThePositionStatusSet")
+        .withArgs(false)
+        .not.to.emit(vault, "FeesEarned");
+
+      const userBalance0Before = await token0.balanceOf(manager.address);
+      const userBalance1Before = await token1.balanceOf(manager.address);
+      const [amount0Current, amount1Current] =
+        await vault.getUnderlyingBalances();
+      const totalSupply = await vault.totalSupply();
+      const vaultShares = await vault.balanceOf(manager.address);
+      const managerBalance0Before = await vault.managerBalance0();
+      const managerBalance1Before = await vault.managerBalance1();
+
+      const managingFee = await vault.managingFee();
+      const userBalance0 = amount0Current.mul(vaultShares).div(totalSupply);
+      const managingFee0 = userBalance0.mul(managingFee).div(10_000);
+
+      const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
+      const managingFee1 = userBalance1.mul(managingFee).div(10_000);
+
+      await expect(vault.burn(vaultShares, false)).not.to.emit(
+        vault,
+        "FeesEarned"
+      );
+      expect(await token0.balanceOf(manager.address)).to.be.equal(
+        userBalance0Before.add(userBalance0)
+      );
+      expect(await token1.balanceOf(manager.address)).to.be.equal(
+        userBalance1Before.add(userBalance1)
+      );
+      expect(await vault.managerBalance0()).to.be.equal(
+        managerBalance0Before.add(managingFee0)
+      );
+      expect(await vault.managerBalance1()).to.be.equal(
+        managerBalance1Before.add(managingFee1)
+      );
+
+      // console.log(ethers.utils.formatEther(await vault.managerBalance0()), ethers.utils.formatEther(await vault.managerBalance1()))
+      // 0.089999999999999997 0.089999999999999997
+    });
+  });
+
+  describe("Add Liquidity", () => {
+    before(async () => {
+      await vault.updateTicks(lowerTick, upperTick);
+    });
+
+    beforeEach(async () => {
+      await token0.approve(vault.address, amount0.mul(bn(2)));
+      await token1.approve(vault.address, amount1.mul(bn(2)));
+      const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
+      await vault.mint(mintAmount, false);
+      await vault.removeLiquidity();
+    });
+
+    it("should not add liquidity by non-manager", async () => {
+      const amount0 = await token0.balanceOf(vault.address);
+      const amount1 = await token1.balanceOf(vault.address);
+
+      await expect(
+        vault
+          .connect(nonManager)
+          .addLiquidity(lowerTick, upperTick, amount0, amount1)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should add liquidity by manager", async () => {
+      const { amount0Current, amount1Current } =
+        await vault.getUnderlyingBalances();
+
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const MockLiquidityAmounts = await ethers.getContractFactory(
+        "MockLiquidityAmounts"
+      );
+      const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
+
+      const { sqrtPriceX96 } = await pancakev3Pool.slot0();
+      const liquidity = mockLiquidityAmounts.getLiquidityForAmounts(
+        sqrtPriceX96,
+        lowerTick,
+        upperTick,
+        amount0Current,
+        amount1Current
+      );
+
+      await expect(
+        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
+      )
+        .to.emit(vault, "LiquidityAdded")
+        .withArgs(liquidity, lowerTick, upperTick, anyValue, anyValue)
+        .to.emit(vault, "InThePositionStatusSet")
+        .withArgs(true);
+    });
+
+    it("should not add liquidity when in the position", async () => {
+      const { amount0Current, amount1Current } =
+        await vault.getUnderlyingBalances();
+
+      await vault.addLiquidity(
+        lowerTick,
+        upperTick,
+        amount0Current,
+        amount1Current
+      );
+
+      await expect(
+        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
+      ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
+    });
+  });
+
+  describe("Fee collection", () => {
+    it("non-manager should not collect fee", async () => {
+      const { sqrtPriceX96 } = await pancakev3Pool.slot0();
+      const liquidity = await pancakev3Pool.liquidity();
+      await token1.transfer(vault.address, amount1);
+      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
+      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+
+      const { fee0, fee1 } = await vault.getCurrentFees();
+      await expect(vault.pullFeeFromPool())
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
+
+      await expect(
+        vault.connect(nonManager).collectManager()
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should manager collect fee", async () => {
+      const { sqrtPriceX96 } = await pancakev3Pool.slot0();
+      const liquidity = await pancakev3Pool.liquidity();
+      await token1.transfer(vault.address, amount1);
+      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
+      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+
+      const { fee0, fee1 } = await vault.getCurrentFees();
+      await expect(vault.pullFeeFromPool())
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
+
+      const managerBalance0 = await vault.managerBalance0();
+      const managerBalance1 = await vault.managerBalance1();
+
+      const managerBalance0Before = await token0.balanceOf(manager.address);
+      const managerBalance1Before = await token1.balanceOf(manager.address);
+      await vault.connect(manager).collectManager();
+
+      const performanceFee0 = fee0
+        .mul(await vault.performanceFee())
+        .div(10_000);
+      const performanceFee1 = fee0
+        .mul(await vault.performanceFee())
+        .div(10_000);
+
+      expect(await token0.balanceOf(manager.address)).to.be.equal(
+        managerBalance0Before.add(managerBalance0).add(performanceFee0)
+      );
+      expect(await token1.balanceOf(manager.address)).to.be.equal(
+        managerBalance1Before.add(managerBalance1).add(performanceFee1)
+      );
+
+      expect(await vault.managerBalance0()).to.be.equal(0);
+      expect(await vault.managerBalance1()).to.be.equal(0);
+    });
+  });
+
+  describe("Test Upgradeability", () => {
+    it("should not upgrade range vault implementation by non-manager of factory", async () => {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const RangeProtocolVault = await ethers.getContractFactory(
+        "RangeProtocolVault",
+        {
+          libraries: {
+            NativeTokenSupport: nativeTokenSupport.address,
+          },
+        }
+      );
+      const newVaultImpl =
+        (await RangeProtocolVault.deploy()) as RangeProtocolVault;
+
+      await expect(
+        factory
+          .connect(nonManager)
+          .upgradeVault(vault.address, newVaultImpl.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+
+      await expect(
+        factory
+          .connect(nonManager)
+          .upgradeVaults([vault.address], [newVaultImpl.address])
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should upgrade range vault implementation by factory manager", async () => {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      const RangeProtocolVault = await ethers.getContractFactory(
+        "RangeProtocolVault",
+        {
+          libraries: {
+            NativeTokenSupport: nativeTokenSupport.address,
+          },
+        }
+      );
+      const newVaultImpl =
+        (await RangeProtocolVault.deploy()) as RangeProtocolVault;
+
+      const implSlot = await vaultImpl.proxiableUUID();
+      expect(
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(vaultImpl.address.toLowerCase(), 32)
+      );
+      await expect(factory.upgradeVault(vault.address, newVaultImpl.address))
+        .to.emit(factory, "VaultImplUpgraded")
+        .withArgs(vault.address, newVaultImpl.address);
+
+      expect(
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
+      );
+
+      const newVaultImpl1 =
+        (await RangeProtocolVault.deploy()) as RangeProtocolVault;
+
+      expect(
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl.address.toLowerCase(), 32)
+      );
+      await expect(
+        factory.upgradeVaults([vault.address], [newVaultImpl1.address])
+      )
+        .to.emit(factory, "VaultImplUpgraded")
+        .withArgs(vault.address, newVaultImpl1.address);
+
+      expect(
+        await ethers.provider.getStorageAt(vault.address, implSlot)
+      ).to.be.equal(
+        ethers.utils.hexZeroPad(newVaultImpl1.address.toLowerCase(), 32)
+      );
+
+      vaultImpl = newVaultImpl1;
+    });
+  });
+
+  describe("transferOwnership", () => {
+    it("should not be able to transferOwnership by non manager", async () => {
+      await expect(
+        vault.connect(nonManager).transferOwnership(newManager.address)
+      ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should be able to transferOwnership by manager", async () => {
+      await expect(vault.transferOwnership(newManager.address))
+        .to.emit(vault, "OwnershipTransferred")
+        .withArgs(manager.address, newManager.address);
+      expect(await vault.manager()).to.be.equal(newManager.address);
+
+      await vault.connect(newManager).transferOwnership(manager.address);
+      expect(await vault.manager()).to.be.equal(manager.address);
+    });
+  });
 });

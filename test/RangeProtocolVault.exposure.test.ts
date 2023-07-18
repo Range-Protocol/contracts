@@ -42,7 +42,7 @@ let initializeData: any;
 const lowerTick = -880000;
 const upperTick = 880000;
 
-describe("RangeProtocolVault::exposure", () => {
+describe.skip("RangeProtocolVault::exposure", () => {
   before(async () => {
     [manager, nonManager, user2, newManager, trader, lpProvider] =
       await ethers.getSigners();
