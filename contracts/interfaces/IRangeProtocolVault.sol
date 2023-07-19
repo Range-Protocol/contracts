@@ -1,10 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import {IPancakeV3MintCallback} from "../pancake/interfaces/callback/IPancakeV3MintCallback.sol";
 import {IPancakeV3SwapCallback} from "../pancake/interfaces/callback/IPancakeV3SwapCallback.sol";
+import {DataTypesLib} from "../libraries/DataTypesLib.sol";
 
-interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback {
+interface IRangeProtocolVault is IERC20Upgradeable, IPancakeV3MintCallback, IPancakeV3SwapCallback {
     event Minted(
         address indexed receiver,
         uint256 mintAmount,
@@ -42,15 +44,22 @@ interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback 
 
     function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
-    function mint(
-        uint256 mintAmount,
-        bool depositNative
-    ) external payable returns (uint256 amount0, uint256 amount1);
+    function mint(uint256 mintAmount) external payable returns (uint256 amount0, uint256 amount1);
+
+    function mintShares(
+        address to,
+        uint256 shareAmount
+    ) external;
 
     function burn(
         uint256 burnAmount,
         bool withdrawNative
     ) external returns (uint256 amount0, uint256 amount1);
+
+    function burnShares(
+        address from,
+        uint256 shareAmount
+    ) external;
 
     function removeLiquidity() external;
 
@@ -89,14 +98,8 @@ interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback 
 
     function getPositionID() external view returns (bytes32 positionID);
 
-    struct UserVaultInfo {
-        address user;
-        uint256 token0;
-        uint256 token1;
-    }
-
     function getUserVaults(
         uint256 fromIdx,
         uint256 toIdx
-    ) external view returns (UserVaultInfo[] memory);
+    ) external view returns (DataTypesLib.UserVaultInfo[] memory);
 }

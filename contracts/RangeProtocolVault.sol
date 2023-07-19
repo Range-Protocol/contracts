@@ -9,15 +9,12 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/se
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 
-import {TickMath} from "./pancake/TickMath.sol";
-import {LiquidityAmounts} from "./pancake/LiquidityAmounts.sol";
-import {FullMath} from "./pancake/FullMath.sol";
+import {DataTypesLib} from "./libraries/DataTypesLib.sol";
+import {LogicLib} from "./libraries/LogicLib.sol";
+import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
-import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
-import {NativeTokenSupport} from "./libraries/NativeTokenSupport.sol";
 import {VaultErrors} from "./errors/VaultErrors.sol";
 
 /**
@@ -45,22 +42,18 @@ contract RangeProtocolVault is
     OwnableUpgradeable,
     ERC20Upgradeable,
     PausableUpgradeable,
-    IRangeProtocolVault,
-    RangeProtocolVaultStorage
+    IRangeProtocolVault
 {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-    using TickMath for int24;
+    DataTypesLib.State private state;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from pancake v3 pool.
-    uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
-    /// Managing fee cannot be set more than 1% of the total fee earned.
-    uint16 public constant MAX_MANAGING_FEE_BPS = 100;
+    modifier onlyVault() {
+        require(msg.sender == address(this));
+        _;
+    }
 
     constructor() {
         _disableInitializers();
     }
-
-    receive() external payable {}
 
     /**
      * @notice initialize initializes the vault contract and is called right after proxy deployment
@@ -88,16 +81,16 @@ contract RangeProtocolVault is
 
         _transferOwnership(manager);
 
-        pool = IPancakeV3Pool(_pool);
-        token0 = IERC20Upgradeable(pool.token0());
-        token1 = IERC20Upgradeable(pool.token1());
-        tickSpacing = _tickSpacing;
-        factory = msg.sender;
+        state.poolData.pool = IPancakeV3Pool(_pool);
+        state.poolData.token0 = IERC20Upgradeable(state.poolData.pool.token0());
+        state.poolData.token1 = IERC20Upgradeable(state.poolData.pool.token1());
+        state.poolData.tickSpacing = _tickSpacing;
+        state.poolData.factory = msg.sender;
 
-        performanceFee = 250;
-        managingFee = 0;
+        state.feeData.performanceFee = 250;
+        state.feeData.managingFee = 0;
         // Managing fee is 0% at the time vault initialization.
-        emit FeesUpdated(0, performanceFee);
+        emit FeesUpdated(0, state.feeData.performanceFee);
     }
 
     /**
@@ -108,13 +101,7 @@ contract RangeProtocolVault is
      * @param _upperTick upperTick to set
      */
     function updateTicks(int24 _lowerTick, int24 _upperTick) external override onlyManager {
-        if (totalSupply() != 0 || inThePosition) revert VaultErrors.NotAllowedToUpdateTicks();
-        _updateTicks(_lowerTick, _upperTick);
-
-        if (!mintStarted) {
-            mintStarted = true;
-            emit MintStarted();
-        }
+        LogicLib.updateTicks(state.poolData, _lowerTick, _upperTick);
     }
 
     /**
@@ -138,15 +125,7 @@ contract RangeProtocolVault is
         uint256 amount1Owed,
         bytes calldata
     ) external override {
-        if (msg.sender != address(pool)) revert VaultErrors.OnlyPoolAllowed();
-
-        if (amount0Owed > 0) {
-            token0.safeTransfer(msg.sender, amount0Owed);
-        }
-
-        if (amount1Owed > 0) {
-            token1.safeTransfer(msg.sender, amount1Owed);
-        }
+        LogicLib.pancakeV3MintCallback(state.poolData, amount0Owed, amount1Owed, "");
     }
 
     /// @notice pancakeV3SwapCallback Pancake v3 callback fn, called back on pool.swap
@@ -155,13 +134,7 @@ contract RangeProtocolVault is
         int256 amount1Delta,
         bytes calldata
     ) external override {
-        if (msg.sender != address(pool)) revert VaultErrors.OnlyPoolAllowed();
-
-        if (amount0Delta > 0) {
-            token0.safeTransfer(msg.sender, uint256(amount0Delta));
-        } else if (amount1Delta > 0) {
-            token1.safeTransfer(msg.sender, uint256(amount1Delta));
-        }
+        LogicLib.pancakeV3SwapCallback(state.poolData, amount0Delta, amount1Delta, "");
     }
 
     /**
@@ -172,68 +145,9 @@ contract RangeProtocolVault is
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
-        uint256 mintAmount,
-        bool depositNative
-    )
-        external
-        payable
-        override
-        nonReentrant
-        whenNotPaused
-        returns (uint256 amount0, uint256 amount1)
-    {
-        if (!mintStarted) revert VaultErrors.MintNotStarted();
-        if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
-        uint256 totalSupply = totalSupply();
-        bool _inThePosition = inThePosition;
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-
-        if (totalSupply > 0) {
-            (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-            amount0 = FullMath.mulDivRoundingUp(amount0Current, mintAmount, totalSupply);
-            amount1 = FullMath.mulDivRoundingUp(amount1Current, mintAmount, totalSupply);
-        } else if (_inThePosition) {
-            // If total supply is zero then inThePosition must be set to accept token0 and token1 based on currently set ticks.
-            // This branch will be executed for the first mint and as well as each time total supply is to be changed from zero to non-zero.
-            (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
-                sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
-                SafeCastUpgradeable.toUint128(mintAmount)
-            );
-        } else {
-            // If total supply is zero and the vault is not in the position then mint cannot be accepted based on the assumptions
-            // that being out of the pool renders currently set ticks unusable and totalSupply being zero does not allow
-            // calculating correct amounts of amount0 and amount1 to be accepted from the user.
-            // This branch will be executed if all users remove their liquidity from the vault i.e. total supply is zero from non-zero and
-            // the vault is out of the position i.e. no valid tick range to calculate the vault's mint shares.
-            // Manager must call initialize function with valid tick ranges to enable the minting again.
-            revert VaultErrors.MintNotAllowed();
-        }
-
-        NativeTokenSupport.acceptUserDeposit(
-            userVaults[msg.sender],
-            users,
-            depositNative,
-            token0,
-            token1,
-            amount0,
-            amount1
-        );
-
-        _mint(msg.sender, mintAmount);
-        if (_inThePosition) {
-            uint128 liquidityMinted = LiquidityAmounts.getLiquidityForAmounts(
-                sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
-                amount0,
-                amount1
-            );
-            pool.mint(address(this), lowerTick, upperTick, liquidityMinted, "");
-        }
-
-        emit Minted(msg.sender, mintAmount, amount0, amount1);
+        uint256 mintAmount
+    ) external payable override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
+        return LogicLib.mint(state.poolData, state.userData, state.feeData, mintAmount);
     }
 
     /**
@@ -246,53 +160,21 @@ contract RangeProtocolVault is
         uint256 burnAmount,
         bool withdrawNative
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
-        if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
-        (amount0, amount1) = getRawWithdrawAmounts(burnAmount);
-        uint256 balanceBefore = balanceOf(msg.sender);
-        _burn(msg.sender, burnAmount);
-
-        _applyManagingFee(amount0, amount1);
-        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
-        NativeTokenSupport.redeemUserDeposit(
-            userVaults[msg.sender],
-            withdrawNative,
-            burnAmount,
-            balanceBefore,
-            token0,
-            token1,
-            amount0,
-            amount1
-        );
-
-        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
+        return LogicLib.burn(state.poolData, state.userData, state.feeData, burnAmount, withdrawNative);
     }
 
-    function getRawWithdrawAmounts(
-        uint256 burnAmount
-    ) private returns (uint256 amount0, uint256 amount1) {
-        uint256 totalSupply = totalSupply();
-        if (inThePosition) {
-            (uint128 liquidity, , , , ) = pool.positions(getPositionID());
-            uint256 liquidityBurned_ = FullMath.mulDiv(burnAmount, liquidity, totalSupply);
-            uint128 liquidityBurned = SafeCastUpgradeable.toUint128(liquidityBurned_);
-            (uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1) = _withdraw(liquidityBurned);
+    function mintShares(
+        address to,
+        uint256 shareAmount
+    ) external override onlyVault {
+        _mint(to, shareAmount);
+    }
 
-            _applyPerformanceFee(fee0, fee1);
-            (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-            emit FeesEarned(fee0, fee1);
-
-            uint256 passiveBalance0 = token0.balanceOf(address(this)) - burn0;
-            uint256 passiveBalance1 = token1.balanceOf(address(this)) - burn1;
-            if (passiveBalance0 > managerBalance0) passiveBalance0 -= managerBalance0;
-            if (passiveBalance1 > managerBalance1) passiveBalance1 -= managerBalance1;
-
-            amount0 = burn0 + FullMath.mulDiv(passiveBalance0, burnAmount, totalSupply);
-            amount1 = burn1 + FullMath.mulDiv(passiveBalance1, burnAmount, totalSupply);
-        } else {
-            (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-            amount0 = FullMath.mulDiv(amount0Current, burnAmount, totalSupply);
-            amount1 = FullMath.mulDiv(amount1Current, burnAmount, totalSupply);
-        }
+    function burnShares(
+        address from,
+        uint256 shareAmount
+    ) external override onlyVault {
+        _burn(from, shareAmount);
     }
 
     /**
@@ -300,26 +182,7 @@ contract RangeProtocolVault is
      * in the vault contract.
      */
     function removeLiquidity() external override onlyManager {
-        (uint128 liquidity, , , , ) = pool.positions(getPositionID());
-
-        if (liquidity > 0) {
-            int24 _lowerTick = lowerTick;
-            int24 _upperTick = upperTick;
-            (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
-
-            emit LiquidityRemoved(liquidity, _lowerTick, _upperTick, amount0, amount1);
-
-            _applyPerformanceFee(fee0, fee1);
-            (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-            emit FeesEarned(fee0, fee1);
-        }
-
-        // TicksSet event is not emitted here since the emitting would create a new position on subgraph but
-        // the following statement is to only disallow any liquidity provision through the vault unless done
-        // by manager (taking into account any features added in future).
-        lowerTick = upperTick;
-        inThePosition = false;
-        emit InThePositionStatusSet(false);
+        LogicLib.removeLiquidity(state.poolData, state.feeData);
     }
 
     /**
@@ -341,15 +204,7 @@ contract RangeProtocolVault is
         int256 swapAmount,
         uint160 sqrtPriceLimitX96
     ) external override onlyManager returns (int256 amount0, int256 amount1) {
-        (amount0, amount1) = pool.swap(
-            address(this),
-            zeroForOne,
-            swapAmount,
-            sqrtPriceLimitX96,
-            ""
-        );
-
-        emit Swapped(zeroForOne, amount0, amount1);
+        return LogicLib.swap(state.poolData, zeroForOne, swapAmount, sqrtPriceLimitX96);
     }
 
     /**
@@ -368,45 +223,7 @@ contract RangeProtocolVault is
         uint256 amount0,
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        _validateTicks(newLowerTick, newUpperTick);
-        if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
-
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 baseLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtRatioX96,
-            newLowerTick.getSqrtRatioAtTick(),
-            newUpperTick.getSqrtRatioAtTick(),
-            amount0,
-            amount1
-        );
-
-        if (baseLiquidity > 0) {
-            (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(
-                address(this),
-                newLowerTick,
-                newUpperTick,
-                baseLiquidity,
-                ""
-            );
-
-            emit LiquidityAdded(
-                baseLiquidity,
-                newLowerTick,
-                newUpperTick,
-                amountDeposited0,
-                amountDeposited1
-            );
-
-            // Should return remaining token number for swap
-            remainingAmount0 = amount0 - amountDeposited0;
-            remainingAmount1 = amount1 - amountDeposited1;
-            lowerTick = newLowerTick;
-            upperTick = newUpperTick;
-            emit TicksSet(newLowerTick, newUpperTick);
-
-            inThePosition = true;
-            emit InThePositionStatusSet(true);
-        }
+        return LogicLib.addLiquidity(state.poolData, newUpperTick, newLowerTick, amount0, amount1);
     }
 
     /**
@@ -414,25 +231,12 @@ contract RangeProtocolVault is
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
-        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
-        _applyPerformanceFee(fee0, fee1);
-        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        emit FeesEarned(fee0, fee1);
+        LogicLib.pullFeeFromPool(state.poolData, state.feeData);
     }
 
     /// @notice collectManager collects manager fees accrued
     function collectManager() external override onlyManager {
-        uint256 amount0 = managerBalance0;
-        uint256 amount1 = managerBalance1;
-        managerBalance0 = 0;
-        managerBalance1 = 0;
-
-        if (amount0 > 0) {
-            token0.safeTransfer(manager(), amount0);
-        }
-        if (amount1 > 0) {
-            token1.safeTransfer(manager(), amount1);
-        }
+        LogicLib.collectManager(state.poolData, state.feeData, manager());
     }
 
     /**
@@ -442,12 +246,7 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
-
-        managingFee = newManagingFee;
-        performanceFee = newPerformanceFee;
-        emit FeesUpdated(newManagingFee, newPerformanceFee);
+        LogicLib.updateFees(state.feeData, newManagingFee, newPerformanceFee);
     }
 
     /**
@@ -462,27 +261,7 @@ contract RangeProtocolVault is
         uint256 amount0Max,
         uint256 amount1Max
     ) external view override returns (uint256 amount0, uint256 amount1, uint256 mintAmount) {
-        if (!mintStarted) revert VaultErrors.MintNotStarted();
-        uint256 totalSupply = totalSupply();
-        if (totalSupply > 0) {
-            (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
-        } else {
-            (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-            uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-                sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
-                amount0Max,
-                amount1Max
-            );
-            mintAmount = uint256(newLiquidity);
-            (amount0, amount1) = LiquidityAmounts.getAmountsForLiquidity(
-                sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
-                newLiquidity
-            );
-        }
+        return LogicLib.getMintAmounts(state.poolData, state.feeData, amount0Max, amount1Max);
     }
 
     /**
@@ -496,8 +275,7 @@ contract RangeProtocolVault is
     function getUnderlyingBalancesAtPrice(
         uint160 sqrtRatioX96
     ) external view override returns (uint256 amount0Current, uint256 amount1Current) {
-        (, int24 tick, , , , , ) = pool.slot0();
-        return _getUnderlyingBalances(sqrtRatioX96, tick);
+        return LogicLib.getUnderlyingBalancesAtPrice(state.poolData, state.feeData, sqrtRatioX96);
     }
 
     /**
@@ -506,17 +284,7 @@ contract RangeProtocolVault is
      * @return fee1 uncollected fee in token1
      */
     function getCurrentFees() external view override returns (uint256 fee0, uint256 fee1) {
-        (, int24 tick, , , , , ) = pool.slot0();
-        (
-            uint128 liquidity,
-            uint256 feeGrowthInside0Last,
-            uint256 feeGrowthInside1Last,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        ) = pool.positions(getPositionID());
-        fee0 = _feesEarned(true, feeGrowthInside0Last, tick, liquidity) + uint256(tokensOwed0);
-        fee1 = _feesEarned(false, feeGrowthInside1Last, tick, liquidity) + uint256(tokensOwed1);
-        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
+        return LogicLib.getCurrentFees(state.poolData, state.feeData);
     }
 
     /**
@@ -527,28 +295,15 @@ contract RangeProtocolVault is
     function getUserVaults(
         uint256 fromIdx,
         uint256 toIdx
-    ) external view override returns (UserVaultInfo[] memory) {
-        if (fromIdx == 0 && toIdx == 0) {
-            toIdx = users.length;
-        }
-        UserVaultInfo[] memory usersVaultInfo = new UserVaultInfo[](toIdx - fromIdx);
-        uint256 count;
-        for (uint256 i = fromIdx; i < toIdx; i++) {
-            UserVault memory userVault = userVaults[users[i]];
-            usersVaultInfo[count++] = UserVaultInfo({
-                user: users[i],
-                token0: userVault.token0,
-                token1: userVault.token1
-            });
-        }
-        return usersVaultInfo;
+    ) external view override returns (DataTypesLib.UserVaultInfo[] memory) {
+        return LogicLib.getUserVaults(state.userData, fromIdx, toIdx);
     }
 
     /**
      * @dev returns the length of users array.
      */
-    function userCount() external view returns (uint256) {
-        return users.length;
+    function userCount() external view returns(uint256) {
+        return LogicLib.userCount(state.userData);
     }
 
     /**
@@ -556,7 +311,7 @@ contract RangeProtocolVault is
      * @return positionID position id of the vault in pancake pool
      */
     function getPositionID() public view override returns (bytes32 positionID) {
-        return keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
+        return LogicLib.getPositionID(state.poolData);
     }
 
     /**
@@ -572,65 +327,13 @@ contract RangeProtocolVault is
         override
         returns (uint256 amount0Current, uint256 amount1Current)
     {
-        (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
-        return _getUnderlyingBalances(sqrtRatioX96, tick);
+        return LogicLib.getUnderlyingBalances(state.poolData, state.feeData);
     }
 
     function getUnderlyingBalancesByShare(
         uint256 shares
     ) external view returns (uint256 amount0, uint256 amount1) {
-        uint256 _totalSupply = totalSupply();
-        if (_totalSupply != 0) {
-            // getUnderlyingBalances already applies performanceFee
-            (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-            amount0 = (shares * amount0Current) / _totalSupply;
-            amount1 = (shares * amount1Current) / _totalSupply;
-            // apply managing fee
-            (amount0, amount1) = _netManagingFees(amount0, amount1);
-        }
-    }
-
-    /**
-     * @notice _getUnderlyingBalances internal function to calculate underlying balances
-     * @param sqrtRatioX96 price to calculate underlying balances at
-     * @param tick tick at the given price
-     * @return amount0Current current amount of token0
-     * @return amount1Current current amount of token1
-     */
-    function _getUnderlyingBalances(
-        uint160 sqrtRatioX96,
-        int24 tick
-    ) internal view returns (uint256 amount0Current, uint256 amount1Current) {
-        (
-            uint128 liquidity,
-            uint256 feeGrowthInside0Last,
-            uint256 feeGrowthInside1Last,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        ) = pool.positions(getPositionID());
-
-        uint256 fee0;
-        uint256 fee1;
-        if (liquidity != 0) {
-            (amount0Current, amount1Current) = LiquidityAmounts.getAmountsForLiquidity(
-                sqrtRatioX96,
-                lowerTick.getSqrtRatioAtTick(),
-                upperTick.getSqrtRatioAtTick(),
-                liquidity
-            );
-            fee0 = _feesEarned(true, feeGrowthInside0Last, tick, liquidity) + uint256(tokensOwed0);
-            fee1 = _feesEarned(false, feeGrowthInside1Last, tick, liquidity) + uint256(tokensOwed1);
-            (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        }
-
-        uint256 passiveBalance0 = fee0 + token0.balanceOf(address(this));
-        uint256 passiveBalance1 = fee1 + token1.balanceOf(address(this));
-        amount0Current += passiveBalance0 > managerBalance0
-            ? passiveBalance0 - managerBalance0
-            : passiveBalance0;
-        amount1Current += passiveBalance1 > managerBalance1
-            ? passiveBalance1 - managerBalance1
-            : passiveBalance1;
+        return LogicLib.getUnderlyingBalancesByShare(state.poolData, state.feeData, shares);
     }
 
     /**
@@ -638,7 +341,7 @@ contract RangeProtocolVault is
      * the contract.
      */
     function _authorizeUpgrade(address) internal override {
-        if (msg.sender != factory) revert VaultErrors.OnlyFactoryAllowed();
+        if (msg.sender != state.poolData.factory) revert VaultErrors.OnlyFactoryAllowed();
     }
 
     /**
@@ -651,211 +354,6 @@ contract RangeProtocolVault is
      */
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
         super._beforeTokenTransfer(from, to, amount);
-
-        // for mint and burn the user vaults adjustment are handled in the respective functions
-        if (from == address(0x0) || to == address(0x0)) return;
-        if (!userVaults[to].exists) {
-            userVaults[to].exists = true;
-            users.push(to);
-        }
-        uint256 senderBalance = balanceOf(from);
-        uint256 token0Amount = userVaults[from].token0 -
-            (userVaults[from].token0 * (senderBalance - amount)) /
-            senderBalance;
-
-        uint256 token1Amount = userVaults[from].token1 -
-            (userVaults[from].token1 * (senderBalance - amount)) /
-            senderBalance;
-
-        userVaults[from].token0 -= token0Amount;
-        userVaults[from].token1 -= token1Amount;
-
-        userVaults[to].token0 += token0Amount;
-        userVaults[to].token1 += token1Amount;
-    }
-
-    /**
-     * @notice _withdraw internal function to withdraw liquidity from uniswap pool
-     * @param liquidity liquidity to remove from the uniswap pool
-     */
-    function _withdraw(
-        uint128 liquidity
-    ) private returns (uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1) {
-        int24 _lowerTick = lowerTick;
-        int24 _upperTick = upperTick;
-        uint256 preBalance0 = token0.balanceOf(address(this));
-        uint256 preBalance1 = token1.balanceOf(address(this));
-        (burn0, burn1) = pool.burn(_lowerTick, _upperTick, liquidity);
-        pool.collect(address(this), _lowerTick, _upperTick, type(uint128).max, type(uint128).max);
-        fee0 = token0.balanceOf(address(this)) - preBalance0 - burn0;
-        fee1 = token1.balanceOf(address(this)) - preBalance1 - burn1;
-    }
-
-    /**
-     * @notice _calcMintAmounts internal function to calculate the amount based on the max supply of token0 and token1
-     * and current supply of RangeVault shares.
-     * @param totalSupply current total supply of range vault shares
-     * @param amount0Max max amount of token0 to compute mint amount
-     * @param amount1Max max amount of token1 to compute mint amount
-     */
-    function _calcMintAmounts(
-        uint256 totalSupply,
-        uint256 amount0Max,
-        uint256 amount1Max
-    ) private view returns (uint256 amount0, uint256 amount1, uint256 mintAmount) {
-        (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-        if (amount0Current == 0 && amount1Current > 0) {
-            mintAmount = FullMath.mulDiv(amount1Max, totalSupply, amount1Current);
-        } else if (amount1Current == 0 && amount0Current > 0) {
-            mintAmount = FullMath.mulDiv(amount0Max, totalSupply, amount0Current);
-        } else if (amount0Current == 0 && amount1Current == 0) {
-            revert VaultErrors.ZeroUnderlyingBalance();
-        } else {
-            uint256 amount0Mint = FullMath.mulDiv(amount0Max, totalSupply, amount0Current);
-            uint256 amount1Mint = FullMath.mulDiv(amount1Max, totalSupply, amount1Current);
-            if (amount0Mint == 0 || amount1Mint == 0) revert VaultErrors.ZeroMintAmount();
-            mintAmount = amount0Mint < amount1Mint ? amount0Mint : amount1Mint;
-        }
-
-        amount0 = FullMath.mulDivRoundingUp(mintAmount, amount0Current, totalSupply);
-        amount1 = FullMath.mulDivRoundingUp(mintAmount, amount1Current, totalSupply);
-    }
-
-    /**
-     * @notice _feesEarned internal function to return the fees accrued
-     * @param isZero true to compute fee for token0 and false to compute fee for token1
-     * @param feeGrowthInsideLast last time the fee was realized for the vault in pancake pool
-     */
-    function _feesEarned(
-        bool isZero,
-        uint256 feeGrowthInsideLast,
-        int24 tick,
-        uint128 liquidity
-    ) private view returns (uint256 fee) {
-        uint256 feeGrowthOutsideLower;
-        uint256 feeGrowthOutsideUpper;
-        uint256 feeGrowthGlobal;
-        if (isZero) {
-            feeGrowthGlobal = pool.feeGrowthGlobal0X128();
-            (, , feeGrowthOutsideLower, , , , , ) = pool.ticks(lowerTick);
-            (, , feeGrowthOutsideUpper, , , , , ) = pool.ticks(upperTick);
-        } else {
-            feeGrowthGlobal = pool.feeGrowthGlobal1X128();
-            (, , , feeGrowthOutsideLower, , , , ) = pool.ticks(lowerTick);
-            (, , , feeGrowthOutsideUpper, , , , ) = pool.ticks(upperTick);
-        }
-
-        unchecked {
-            uint256 feeGrowthBelow;
-            if (tick >= lowerTick) {
-                feeGrowthBelow = feeGrowthOutsideLower;
-            } else {
-                feeGrowthBelow = feeGrowthGlobal - feeGrowthOutsideLower;
-            }
-
-            uint256 feeGrowthAbove;
-            if (tick < upperTick) {
-                feeGrowthAbove = feeGrowthOutsideUpper;
-            } else {
-                feeGrowthAbove = feeGrowthGlobal - feeGrowthOutsideUpper;
-            }
-            uint256 feeGrowthInside = feeGrowthGlobal - feeGrowthBelow - feeGrowthAbove;
-
-            fee = FullMath.mulDiv(
-                liquidity,
-                feeGrowthInside - feeGrowthInsideLast,
-                0x100000000000000000000000000000000
-            );
-        }
-    }
-
-    /**
-     * @notice _applyManagingFee applies the managing fee to the notional value of the redeeming user.
-     * @param amount0 user's notional value in token0
-     * @param amount1 user's notional value in token1
-     */
-    function _applyManagingFee(uint256 amount0, uint256 amount1) private {
-        uint256 _managingFee = managingFee;
-        managerBalance0 += (amount0 * _managingFee) / 10_000;
-        managerBalance1 += (amount1 * _managingFee) / 10_000;
-    }
-
-    /**
-     * @notice _applyPerformanceFee applies the performance fee to the fees earned from pancake v3 pool.
-     * @param fee0 fee earned in token0
-     * @param fee1 fee earned in token1
-     */
-    function _applyPerformanceFee(uint256 fee0, uint256 fee1) private {
-        uint256 _performanceFee = performanceFee;
-        managerBalance0 += (fee0 * _performanceFee) / 10_000;
-        managerBalance1 += (fee1 * _performanceFee) / 10_000;
-    }
-
-    /**
-     * @notice _netManagingFees computes the fee share for manager from notional value of the redeeming user.
-     * @param amount0 user's notional value in token0
-     * @param amount1 user's notional value in token1
-     * @return amount0AfterFee user's notional value in token0 after managing fee deduction
-     * @return amount1AfterFee user's notional value in token1 after managing fee deduction
-     */
-    function _netManagingFees(
-        uint256 amount0,
-        uint256 amount1
-    ) private view returns (uint256 amount0AfterFee, uint256 amount1AfterFee) {
-        uint256 _managingFee = managingFee;
-        uint256 deduct0 = (amount0 * _managingFee) / 10_000;
-        uint256 deduct1 = (amount1 * _managingFee) / 10_000;
-        amount0AfterFee = amount0 - deduct0;
-        amount1AfterFee = amount1 - deduct1;
-    }
-
-    /**
-     * @notice _netPerformanceFees computes the fee share for manager as performance fee from the fee earned from pancake v3 pool.
-     * @param rawFee0 fee earned in token0 from pancake v3 pool.
-     * @param rawFee1 fee earned in token1 from pancake v3 pool.
-     * @return fee0AfterDeduction fee in token0 earned after deducting performance fee from earned fee.
-     * @return fee1AfterDeduction fee in token1 earned after deducting performance fee from earned fee.
-     */
-    function _netPerformanceFees(
-        uint256 rawFee0,
-        uint256 rawFee1
-    ) private view returns (uint256 fee0AfterDeduction, uint256 fee1AfterDeduction) {
-        uint256 _performanceFee = performanceFee;
-        uint256 deduct0 = (rawFee0 * _performanceFee) / 10_000;
-        uint256 deduct1 = (rawFee1 * _performanceFee) / 10_000;
-        fee0AfterDeduction = rawFee0 - deduct0;
-        fee1AfterDeduction = rawFee1 - deduct1;
-    }
-
-    /**
-     * @notice _updateTicks internal function to validate and update ticks
-     * _lowerTick lower tick to update
-     * _upperTick upper tick to update
-     */
-    function _updateTicks(int24 _lowerTick, int24 _upperTick) private {
-        _validateTicks(_lowerTick, _upperTick);
-        lowerTick = _lowerTick;
-        upperTick = _upperTick;
-
-        // Upon updating ticks inThePosition status is set to true.
-        inThePosition = true;
-        emit InThePositionStatusSet(true);
-        emit TicksSet(_lowerTick, _upperTick);
-    }
-
-    /**
-     * @notice _validateTicks validates the upper and lower ticks
-     * @param _lowerTick lower tick to validate
-     * @param _upperTick upper tick to validate
-     */
-    function _validateTicks(int24 _lowerTick, int24 _upperTick) private view {
-        if (_lowerTick < TickMath.MIN_TICK || _upperTick > TickMath.MAX_TICK)
-            revert VaultErrors.TicksOutOfRange();
-
-        if (
-            _lowerTick >= _upperTick ||
-            _lowerTick % tickSpacing != 0 ||
-            _upperTick % tickSpacing != 0
-        ) revert VaultErrors.InvalidTicksSpacing();
+        LogicLib.beforeTokenTransfer(state.userData, from, to, amount);
     }
 }
