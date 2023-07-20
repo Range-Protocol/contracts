@@ -589,13 +589,6 @@ library LogicLib {
     }
 
     /**
-     * @dev returns the length of users array.
-     */
-    function userCount(DataTypesLib.UserData storage userData) external view returns (uint256) {
-        return userData.users.length;
-    }
-
-    /**
      * @notice getPositionID returns the position id of the vault in pancake pool
      * @return positionID position id of the vault in pancake pool
      */

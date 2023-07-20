@@ -16,6 +16,7 @@ import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
 import {VaultErrors} from "./errors/VaultErrors.sol";
+import "./RangeProtocolVaultStorage.sol";
 
 /**
  * @dev Mars@RangeProtocol
@@ -42,10 +43,9 @@ contract RangeProtocolVault is
     OwnableUpgradeable,
     ERC20Upgradeable,
     PausableUpgradeable,
-    IRangeProtocolVault
+    IRangeProtocolVault,
+    RangeProtocolVaultStorage
 {
-    DataTypesLib.State private state;
-
     modifier onlyVault() {
         require(msg.sender == address(this));
         _;
@@ -53,6 +53,10 @@ contract RangeProtocolVault is
 
     constructor() {
         _disableInitializers();
+    }
+
+    receive() external payable {
+        require(msg.sender == state.poolData.WETH9);
     }
 
     /**
@@ -232,7 +236,7 @@ contract RangeProtocolVault is
         uint256 amount0,
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        return LogicLib.addLiquidity(state.poolData, newUpperTick, newLowerTick, amount0, amount1);
+        return LogicLib.addLiquidity(state.poolData, newLowerTick, newUpperTick, amount0, amount1);
     }
 
     /**
@@ -306,13 +310,6 @@ contract RangeProtocolVault is
         uint256 toIdx
     ) external view override returns (DataTypesLib.UserVaultInfo[] memory) {
         return LogicLib.getUserVaults(state.userData, fromIdx, toIdx);
-    }
-
-    /**
-     * @dev returns the length of users array.
-     */
-    function userCount() external view returns (uint256) {
-        return LogicLib.userCount(state.userData);
     }
 
     /**

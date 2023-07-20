@@ -5,7 +5,7 @@ import {IWETH9} from "../interfaces/IWETH9.sol";
 import {TransferHelper} from "../libraries/TransferHelper.sol";
 
 library PeripheryPaymentsLib {
-    function unwrapWETH9(address WETH9, uint256 amount, address recipient) external {
+    function unwrapWETH9(address WETH9, uint256 amount, address recipient) internal {
         IWETH9(WETH9).withdraw(amount);
         TransferHelper.safeTransferETH(recipient, amount);
     }
@@ -16,7 +16,7 @@ library PeripheryPaymentsLib {
         address payer,
         address recipient,
         uint256 value
-    ) external {
+    ) internal {
         if (token == WETH9 && address(this).balance >= value) {
             // pay with WETH9
             IWETH9(WETH9).deposit{value: value}(); // wrap only what is needed to pay
@@ -30,7 +30,7 @@ library PeripheryPaymentsLib {
         }
     }
 
-    function refundETH() external {
+    function refundETH() internal {
         if (address(this).balance > 0)
             TransferHelper.safeTransferETH(msg.sender, address(this).balance);
     }

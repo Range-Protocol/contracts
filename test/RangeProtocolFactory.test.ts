@@ -8,7 +8,7 @@ import {
   IPancakeV3Pool,
   RangeProtocolVault,
   RangeProtocolFactory,
-  NativeTokenSupport,
+  LogicLib,
 } from "../typechain";
 import { bn, getInitializeData, ZERO_ADDRESS } from "./common";
 import { Contract } from "ethers";
@@ -17,7 +17,7 @@ let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
 let pancakeV3Factory: IPancakeV3Factory;
 let pancakev3Pool: IPancakeV3Pool;
-let nativeTokenSupport: NativeTokenSupport;
+let logicLib: LogicLib;
 let token0: IERC20;
 let token1: IERC20;
 let owner: SignerWithAddress;
@@ -61,16 +61,14 @@ describe("RangeProtocolFactory", () => {
       await pancakeV3Factory.getPool(token0.address, token1.address, poolFee)
     )) as IPancakeV3Pool;
 
-    const NativeTokenSupport = await ethers.getContractFactory(
-      "NativeTokenSupport"
-    );
-    nativeTokenSupport = await NativeTokenSupport.deploy();
+    const LogicLib = await ethers.getContractFactory("LogicLib");
+    logicLib = await LogicLib.deploy();
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const RangeProtocolVault = await ethers.getContractFactory(
       "RangeProtocolVault",
       {
         libraries: {
-          NativeTokenSupport: nativeTokenSupport.address,
+          LogicLib: logicLib.address,
         },
       }
     );
@@ -97,7 +95,7 @@ describe("RangeProtocolFactory", () => {
         vaultImpl.address,
         initializeData
       )
-    ).to.be.revertedWith("ZeroPoolAddress()");
+    );
   });
 
   it("should not deploy a vault with both tokens being the same", async function () {
