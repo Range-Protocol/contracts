@@ -46,20 +46,14 @@ interface IRangeProtocolVault is IERC20Upgradeable, IPancakeV3MintCallback, IPan
 
     function mint(uint256 mintAmount) external payable returns (uint256 amount0, uint256 amount1);
 
-    function mintShares(
-        address to,
-        uint256 shareAmount
-    ) external;
+    function mintShares(address to, uint256 shareAmount) external;
 
     function burn(
         uint256 burnAmount,
         bool withdrawNative
     ) external returns (uint256 amount0, uint256 amount1);
 
-    function burnShares(
-        address from,
-        uint256 shareAmount
-    ) external;
+    function burnShares(address from, uint256 shareAmount) external;
 
     function removeLiquidity() external;
 

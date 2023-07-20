@@ -146,7 +146,14 @@ contract RangeProtocolVault is
      */
     function mint(
         uint256 mintAmount
-    ) external payable override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
+    )
+        external
+        payable
+        override
+        nonReentrant
+        whenNotPaused
+        returns (uint256 amount0, uint256 amount1)
+    {
         return LogicLib.mint(state.poolData, state.userData, state.feeData, mintAmount);
     }
 
@@ -160,20 +167,21 @@ contract RangeProtocolVault is
         uint256 burnAmount,
         bool withdrawNative
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
-        return LogicLib.burn(state.poolData, state.userData, state.feeData, burnAmount, withdrawNative);
+        return
+            LogicLib.burn(
+                state.poolData,
+                state.userData,
+                state.feeData,
+                burnAmount,
+                withdrawNative
+            );
     }
 
-    function mintShares(
-        address to,
-        uint256 shareAmount
-    ) external override onlyVault {
+    function mintShares(address to, uint256 shareAmount) external override onlyVault {
         _mint(to, shareAmount);
     }
 
-    function burnShares(
-        address from,
-        uint256 shareAmount
-    ) external override onlyVault {
+    function burnShares(address from, uint256 shareAmount) external override onlyVault {
         _burn(from, shareAmount);
     }
 
@@ -302,7 +310,7 @@ contract RangeProtocolVault is
     /**
      * @dev returns the length of users array.
      */
-    function userCount() external view returns(uint256) {
+    function userCount() external view returns (uint256) {
         return LogicLib.userCount(state.userData);
     }
 

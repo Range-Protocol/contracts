@@ -88,11 +88,23 @@ library LogicLib {
         if (msg.sender != address(poolData.pool)) revert VaultErrors.OnlyPoolAllowed();
 
         if (amount0Owed > 0) {
-            PeripheryPaymentsLib.pay(poolData.WETH9, address(poolData.token0), address(this), msg.sender, amount0Owed);
+            PeripheryPaymentsLib.pay(
+                poolData.WETH9,
+                address(poolData.token0),
+                address(this),
+                msg.sender,
+                amount0Owed
+            );
         }
 
         if (amount1Owed > 0) {
-            PeripheryPaymentsLib.pay(poolData.WETH9, address(poolData.token1), address(this), msg.sender, amount1Owed);
+            PeripheryPaymentsLib.pay(
+                poolData.WETH9,
+                address(poolData.token1),
+                address(this),
+                msg.sender,
+                amount1Owed
+            );
         }
     }
 
@@ -106,9 +118,21 @@ library LogicLib {
         if (msg.sender != address(poolData.pool)) revert VaultErrors.OnlyPoolAllowed();
 
         if (amount0Delta > 0) {
-            PeripheryPaymentsLib.pay(poolData.WETH9, address(poolData.token0), address(this), msg.sender, uint256(amount0Delta));
+            PeripheryPaymentsLib.pay(
+                poolData.WETH9,
+                address(poolData.token0),
+                address(this),
+                msg.sender,
+                uint256(amount0Delta)
+            );
         } else if (amount1Delta > 0) {
-            PeripheryPaymentsLib.pay(poolData.WETH9, address(poolData.token1), address(this), msg.sender, uint256(amount1Delta));
+            PeripheryPaymentsLib.pay(
+                poolData.WETH9,
+                address(poolData.token1),
+                address(this),
+                msg.sender,
+                uint256(amount1Delta)
+            );
         }
     }
 
