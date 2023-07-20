@@ -530,8 +530,7 @@ library LogicLib {
         DataTypesLib.FeeData storage feeData,
         uint160 sqrtRatioX96
     ) external view returns (uint256 amount0Current, uint256 amount1Current) {
-        (, int24 tick, , , , , ) = poolData.pool.slot0();
-        return _getUnderlyingBalances(poolData, feeData, sqrtRatioX96, tick);
+        return _getUnderlyingBalances(poolData, feeData, sqrtRatioX96);
     }
 
     /**
@@ -609,8 +608,8 @@ library LogicLib {
         DataTypesLib.PoolData storage poolData,
         DataTypesLib.FeeData storage feeData
     ) public view returns (uint256 amount0Current, uint256 amount1Current) {
-        (uint160 sqrtRatioX96, int24 tick, , , , , ) = poolData.pool.slot0();
-        return _getUnderlyingBalances(poolData, feeData, sqrtRatioX96, tick);
+        (uint160 sqrtRatioX96, , , , , , ) = poolData.pool.slot0();
+        return _getUnderlyingBalances(poolData, feeData, sqrtRatioX96);
     }
 
     function getUnderlyingBalancesByShare(
@@ -635,17 +634,15 @@ library LogicLib {
     /**
      * @notice _getUnderlyingBalances internal function to calculate underlying balances
      * @param sqrtRatioX96 price to calculate underlying balances at
-     * @param tick tick at the given price
      * @return amount0Current current amount of token0
      * @return amount1Current current amount of token1
      */
     function _getUnderlyingBalances(
         DataTypesLib.PoolData storage poolData,
         DataTypesLib.FeeData storage feeData,
-        uint160 sqrtRatioX96,
-        int24 tick
+        uint160 sqrtRatioX96
     ) internal view returns (uint256 amount0Current, uint256 amount1Current) {
-        (amount0Current, amount1Current) = poolBalance(poolData, feeData, sqrtRatioX96, tick);
+        (amount0Current, amount1Current) = poolBalance(poolData, sqrtRatioX96);
         (uint256 fee0, uint256 fee1) = getCurrentFees(poolData, feeData);
         (amount0Current, amount1Current) = adjustPassiveBalance(
             poolData,
@@ -659,9 +656,7 @@ library LogicLib {
 
     function poolBalance(
         DataTypesLib.PoolData storage poolData,
-        DataTypesLib.FeeData storage feeData,
-        uint160 sqrtRatioX96,
-        int24 tick
+        uint160 sqrtRatioX96
     ) private view returns (uint256 amount0Current, uint256 amount1Current) {
         (
             uint128 liquidity,
@@ -935,7 +930,7 @@ library LogicLib {
      * @param _lowerTick lower tick to validate
      * @param _upperTick upper tick to validate
      */
-    function _validateTicks(int24 _lowerTick, int24 _upperTick, int24 _tickSpacing) private view {
+    function _validateTicks(int24 _lowerTick, int24 _upperTick, int24 _tickSpacing) private pure {
         if (_lowerTick < TickMath.MIN_TICK || _upperTick > TickMath.MAX_TICK)
             revert VaultErrors.TicksOutOfRange();
 
