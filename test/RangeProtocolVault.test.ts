@@ -162,7 +162,7 @@ describe("RangeProtocolVault", () => {
     ).to.be.revertedWithCustomError(logicLib, "TicksOutOfRange");
   });
 
-  it.skip("should not updateTicks with ticks not following tick spacing", async () => {
+  it("should not updateTicks with ticks not following tick spacing", async () => {
     await expect(
       vault.connect(manager).updateTicks(0, 1)
     ).to.be.revertedWithCustomError(logicLib, "InvalidTicksSpacing");

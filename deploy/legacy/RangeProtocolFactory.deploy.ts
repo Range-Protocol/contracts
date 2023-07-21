@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 async function main() {
-  const UNI_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
+  const UNI_V3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
   let RangeProtocolFactory = await ethers.getContractFactory(
     "RangeProtocolFactory"
   );

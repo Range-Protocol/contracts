@@ -44,7 +44,7 @@ export const getInitializeData = (params: {
       params.managerAddress,
       params.name,
       params.symbol,
-      "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+      "0x959f29170266CA4cF3E83C4EcFc7f8f9Ff9d3dc0",
     ]
   );
 

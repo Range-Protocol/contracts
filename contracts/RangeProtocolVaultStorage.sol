@@ -5,7 +5,6 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20
 import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
-
 abstract contract RangeProtocolVaultStorage {
     DataTypesLib.State internal state;
 

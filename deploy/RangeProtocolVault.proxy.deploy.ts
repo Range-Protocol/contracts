@@ -7,7 +7,7 @@ async function main() {
   const ledger = await new LedgerSigner(provider, ""); // To be updated.
   const managerAddress = "0x84b43ce5fB1FAF013181FEA96ffA4af6179e396a"; // To be updated.
   const rangeProtocolFactoryAddress =
-    "0x4bF9CDcCE12924B559928623a5d23598ca19367B"; // To be updated.
+    "0x835c3842d7E09Be1e85E8D221Fad1fF306980e09"; // To be updated.
   const vaultImplAddress = ""; // to be updated.
   const token0 = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
   const token1 = "0xc944E90C64B2c07662A292be6244BDf05Cda44a7";

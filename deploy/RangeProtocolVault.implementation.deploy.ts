@@ -1,20 +1,15 @@
 import { ethers } from "hardhat";
-import { LedgerSigner } from "@anders-t/ethers-ledger";
 
 async function main() {
-  const provider = ethers.getDefaultProvider(""); // To be updated.
-  const ledger = await new LedgerSigner(provider, ""); // To be updated.
-
-  const NATIVE_TOKEN_SUPPORT = ""; // to be updated.
+  const LOGIC_LIB_ADDRESS = "0x420277F9681e31e06DAD061c560f43303360E6dA";
   let RangeProtocolVault = await ethers.getContractFactory(
     "RangeProtocolVault",
     {
       libraries: {
-        NativeTokenSupport: NATIVE_TOKEN_SUPPORT,
+        LogicLib: LOGIC_LIB_ADDRESS,
       },
     }
   );
-  RangeProtocolVault = await RangeProtocolVault.connect(ledger);
   const vaultImpl = await RangeProtocolVault.deploy();
   console.log(vaultImpl.address);
 }

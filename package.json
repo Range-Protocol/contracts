@@ -19,7 +19,6 @@
     "@anders-t/ethers-ledger": "^1.0.4",
     "@nomicfoundation/hardhat-chai-matchers": "^1.0.6",
     "@nomiclabs/hardhat-ethers": "npm:hardhat-deploy-ethers",
-    "@nomiclabs/hardhat-etherscan": "2.1.2",
     "@nomiclabs/hardhat-waffle": "2.0.1",
     "@openzeppelin/contracts": "4.1.0",
     "@openzeppelin/contracts-upgradeable": "4.8.2",
@@ -58,5 +57,8 @@
   "lint-staged": {
     "*.{ts,js}": "eslint -c .eslintrc.json"
   },
-  "version": "0.0.0"
+  "version": "0.0.0",
+  "dependencies": {
+    "@nomiclabs/hardhat-etherscan": "^3.1.7"
+  }
 }

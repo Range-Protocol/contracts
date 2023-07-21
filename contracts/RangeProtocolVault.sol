@@ -16,7 +16,7 @@ import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 import {IRangeProtocolVault} from "./interfaces/IRangeProtocolVault.sol";
 import {OwnableUpgradeable} from "./access/OwnableUpgradeable.sol";
 import {VaultErrors} from "./errors/VaultErrors.sol";
-import "./RangeProtocolVaultStorage.sol";
+import {RangeProtocolVaultStorage} from "./RangeProtocolVaultStorage.sol";
 
 /**
  * @dev Mars@RangeProtocol
