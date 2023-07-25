@@ -41,10 +41,4 @@ library DataTypesLib {
         uint256 token0;
         uint256 token1;
     }
-
-    struct State {
-        PoolData poolData;
-        FeeData feeData;
-        UserData userData;
-    }
 }

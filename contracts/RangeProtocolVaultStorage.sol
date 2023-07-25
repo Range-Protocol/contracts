@@ -6,7 +6,16 @@ import {IPancakeV3Pool} from "./pancake/interfaces/IPancakeV3Pool.sol";
 import {DataTypesLib} from "./libraries/DataTypesLib.sol";
 
 abstract contract RangeProtocolVaultStorage {
-    DataTypesLib.State internal state;
+    struct State {
+        DataTypesLib.PoolData poolData;
+        uint256[50] _emptySlots1;
+        DataTypesLib.FeeData feeData;
+        uint256[50] _emptySlots2;
+        DataTypesLib.UserData userData;
+        uint256[50] _emptySlots3;
+    }
+
+    State internal state;
 
     function factory() external view returns (address) {
         return state.poolData.factory;
