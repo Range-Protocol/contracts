@@ -44,7 +44,10 @@ interface IRangeProtocolVault is IERC20Upgradeable, IPancakeV3MintCallback, IPan
 
     function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
-    function mint(uint256 mintAmount) external payable returns (uint256 amount0, uint256 amount1);
+    function mint(
+        uint256 mintAmount,
+        bool depositNative
+    ) external payable returns (uint256 amount0, uint256 amount1);
 
     function mintShares(address to, uint256 shareAmount) external;
 

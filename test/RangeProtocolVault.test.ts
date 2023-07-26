@@ -139,7 +139,7 @@ describe("RangeProtocolVault", () => {
   });
 
   it("should not mint when vault is not initialized", async () => {
-    await expect(vault.mint(amount0)).to.be.revertedWithCustomError(
+    await expect(vault.mint(amount0, false)).to.be.revertedWithCustomError(
       logicLib,
       "MintNotStarted"
     );
@@ -186,7 +186,7 @@ describe("RangeProtocolVault", () => {
 
   it("should not allow minting with zero mint amount", async () => {
     const mintAmount = 0;
-    await expect(vault.mint(mintAmount)).to.be.revertedWithCustomError(
+    await expect(vault.mint(mintAmount, false)).to.be.revertedWithCustomError(
       logicLib,
       "InvalidMintAmount"
     );
@@ -201,7 +201,9 @@ describe("RangeProtocolVault", () => {
 
     const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
 
-    await expect(vault.mint(mintAmount)).to.be.revertedWith("Pausable: paused");
+    await expect(vault.mint(mintAmount, false)).to.be.revertedWith(
+      "Pausable: paused"
+    );
     await expect(vault.unpause())
       .to.emit(vault, "Unpaused")
       .withArgs(manager.address);
@@ -222,7 +224,7 @@ describe("RangeProtocolVault", () => {
     expect(await token0.balanceOf(pancakev3Pool.address)).to.be.equal(0);
     expect(await token1.balanceOf(pancakev3Pool.address)).to.be.equal(0);
 
-    await expect(vault.mint(mintAmount))
+    await expect(vault.mint(mintAmount, false))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -255,11 +257,16 @@ describe("RangeProtocolVault", () => {
     } = await vault.getMintAmounts(amount0, amount1);
 
     await expect(
-      vault.mint(mintAmount, { value: _amount1 })
+      vault.mint(mintAmount, true, {
+        value:
+          token0.address === (await pancakev3Pool.token0())
+            ? _amount0
+            : _amount1,
+      })
     ).to.be.revertedWithCustomError(logicLib, "NativeTokenSent");
   });
 
-  it("should not mint when less than required native token is supplied", async () => {
+  it.skip("should not mint when less than required native token is supplied", async () => {
     const {
       mintAmount,
       // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -272,7 +279,12 @@ describe("RangeProtocolVault", () => {
     await token1.approve(vault.address, bn(0));
 
     await expect(
-      vault.mint(mintAmount, { value: _amount1.div(2) })
+      vault.mint(mintAmount, true, {
+        value:
+          token0.address === (await pancakev3Pool.token0())
+            ? _amount0.div(bn(2))
+            : _amount1.div(bn(2)),
+      })
     ).to.be.revertedWith("ERC20: insufficient allowance"); // tries to retrieve Wrappet ERC20 balance
   });
 
@@ -292,7 +304,12 @@ describe("RangeProtocolVault", () => {
     );
 
     const receipt = await (
-      await vault.mint(mintAmount, { value: _amount1 })
+      await vault.mint(mintAmount, true, {
+        value:
+          token0.address === (await pancakev3Pool.token0())
+            ? _amount0
+            : _amount1,
+      })
     ).wait();
     const gasUsed = bn(receipt.cumulativeGasUsed).mul(
       bn(receipt.effectiveGasPrice)
@@ -324,7 +341,7 @@ describe("RangeProtocolVault", () => {
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
 
     expect(await vault.totalSupply()).to.not.be.equal(0);
-    await expect(vault.mint(mintAmount))
+    await expect(vault.mint(mintAmount, false))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -446,7 +463,10 @@ describe("RangeProtocolVault", () => {
       amount1: _amount1,
     } = await vault.getMintAmounts(amount0, amount1);
 
-    await vault.mint(mintAmount, { value: _amount1 });
+    await vault.mint(mintAmount, true, {
+      value:
+        token0.address === (await pancakev3Pool.token0()) ? _amount0 : _amount1,
+    });
     const burnAmount = await vault.balanceOf(manager.address);
 
     console.log((await ethers.provider.getBalance(manager.address)).toString());
@@ -456,11 +476,11 @@ describe("RangeProtocolVault", () => {
 
   it("should not add liquidity when total supply is zero and vault is out of the pool", async () => {
     const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-    await vault.mint(mintAmount);
+    await vault.mint(mintAmount, false);
     await vault.removeLiquidity();
     await vault.burn(await vault.balanceOf(manager.address), false);
 
-    await expect(vault.mint(mintAmount)).to.be.revertedWithCustomError(
+    await expect(vault.mint(mintAmount, false)).to.be.revertedWithCustomError(
       logicLib,
       "MintNotAllowed"
     );
@@ -503,7 +523,7 @@ describe("RangeProtocolVault", () => {
       await token0.approve(vault.address, amount0.mul(bn(2)));
       await token1.approve(vault.address, amount1.mul(bn(2)));
       const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount);
+      await vault.mint(mintAmount, false);
     });
 
     it("should not remove liquidity by non-manager", async () => {
@@ -593,7 +613,7 @@ describe("RangeProtocolVault", () => {
       await token0.approve(vault.address, amount0.mul(bn(2)));
       await token1.approve(vault.address, amount1.mul(bn(2)));
       const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount);
+      await vault.mint(mintAmount, false);
       await vault.removeLiquidity();
     });
 

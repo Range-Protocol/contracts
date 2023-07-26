@@ -150,7 +150,8 @@ contract RangeProtocolVault is
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
-        uint256 mintAmount
+        uint256 mintAmount,
+        bool depositNative
     )
         external
         payable
@@ -159,7 +160,8 @@ contract RangeProtocolVault is
         whenNotPaused
         returns (uint256 amount0, uint256 amount1)
     {
-        return LogicLib.mint(state.poolData, state.userData, state.feeData, mintAmount);
+        return
+            LogicLib.mint(state.poolData, state.userData, state.feeData, mintAmount, depositNative);
     }
 
     /**

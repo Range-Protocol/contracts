@@ -93,7 +93,8 @@ library LogicLib {
                 address(poolData.token0),
                 address(this),
                 msg.sender,
-                amount0Owed
+                amount0Owed,
+                false
             );
         }
 
@@ -103,7 +104,8 @@ library LogicLib {
                 address(poolData.token1),
                 address(this),
                 msg.sender,
-                amount1Owed
+                amount1Owed,
+                false
             );
         }
     }
@@ -123,7 +125,8 @@ library LogicLib {
                 address(poolData.token0),
                 address(this),
                 msg.sender,
-                uint256(amount0Delta)
+                uint256(amount0Delta),
+                false
             );
         } else if (amount1Delta > 0) {
             PeripheryPaymentsLib.pay(
@@ -131,7 +134,8 @@ library LogicLib {
                 address(poolData.token1),
                 address(this),
                 msg.sender,
-                uint256(amount1Delta)
+                uint256(amount1Delta),
+                false
             );
         }
     }
@@ -147,7 +151,8 @@ library LogicLib {
         DataTypesLib.PoolData storage poolData,
         DataTypesLib.UserData storage userData,
         DataTypesLib.FeeData storage feeData,
-        uint256 mintAmount
+        uint256 mintAmount,
+        bool depositNative
     ) external returns (uint256 amount0, uint256 amount1) {
         if (!poolData.mintStarted) revert VaultErrors.MintNotStarted();
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
@@ -187,12 +192,30 @@ library LogicLib {
             userData.users.push(msg.sender);
         }
         if (amount0 > 0) {
+            address WETH9 = poolData.WETH9;
+            address token0 = address(poolData.token0);
             userData.vaults[msg.sender].token0 += amount0;
-            poolData.token0.safeTransferFrom(msg.sender, address(this), amount0);
+            PeripheryPaymentsLib.pay(
+                WETH9,
+                token0,
+                msg.sender,
+                address(this),
+                uint256(amount0),
+                depositNative && WETH9 == token0
+            );
         }
         if (amount1 > 0) {
+            address WETH9 = poolData.WETH9;
+            address token1 = address(poolData.token1);
             userData.vaults[msg.sender].token1 += amount1;
-            poolData.token1.safeTransferFrom(msg.sender, address(this), amount1);
+            PeripheryPaymentsLib.pay(
+                WETH9,
+                token1,
+                msg.sender,
+                address(this),
+                uint256(amount1),
+                depositNative && WETH9 == token1
+            );
         }
 
         vault.mintShares(msg.sender, mintAmount);
@@ -247,7 +270,14 @@ library LogicLib {
             if (withdrawNative && address(poolData.token0) == poolData.WETH9) {
                 PeripheryPaymentsLib.unwrapWETH9(poolData.WETH9, amount0AfterFee, msg.sender);
             } else {
-                poolData.token0.safeTransfer(msg.sender, amount0AfterFee);
+                PeripheryPaymentsLib.pay(
+                    poolData.WETH9,
+                    address(poolData.token0),
+                    address(this),
+                    msg.sender,
+                    uint256(amount0AfterFee),
+                    false
+                );
             }
         }
         if (amount1AfterFee > 0) {
@@ -258,7 +288,14 @@ library LogicLib {
             if (withdrawNative && address(poolData.token1) == poolData.WETH9) {
                 PeripheryPaymentsLib.unwrapWETH9(poolData.WETH9, amount1AfterFee, msg.sender);
             } else {
-                poolData.token1.safeTransfer(msg.sender, amount1AfterFee);
+                PeripheryPaymentsLib.pay(
+                    poolData.WETH9,
+                    address(poolData.token1),
+                    address(this),
+                    msg.sender,
+                    uint256(amount1AfterFee),
+                    false
+                );
             }
         }
 

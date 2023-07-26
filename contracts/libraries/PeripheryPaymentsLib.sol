@@ -15,9 +15,12 @@ library PeripheryPaymentsLib {
         address token,
         address payer,
         address recipient,
-        uint256 value
+        uint256 value,
+        bool depositNative
     ) internal {
-        if (token == WETH9 && address(this).balance >= value) {
+        if (depositNative) {
+            if (token == WETH9 && address(this).balance >= value)
+                revert("Not enough native tokens deposited");
             // pay with WETH9
             IWETH9(WETH9).deposit{value: value}(); // wrap only what is needed to pay
             IWETH9(WETH9).transfer(recipient, value);
