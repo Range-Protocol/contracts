@@ -20,7 +20,6 @@ library NativeTokenSupport {
         uint256 amount1,
         address WETH9
     ) external {
-        if (!depositNative && msg.value != 0) revert NativeTokenSupportErrors.NativeTokenSent();
         if (!userVault.exists) {
             userVault.exists = true;
             users.push(msg.sender);

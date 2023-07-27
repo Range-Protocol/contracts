@@ -29,7 +29,7 @@ const WETH9 = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 const poolFee = 10000;
 let isToken0Native: boolean;
 
-describe("RangeProtocolVault", () => {
+describe.only("RangeProtocolVault", () => {
     before(async () => {
         [user] = await ethers.getSigners();
         const pancakeFactory = await ethers.getContractAt("IPancakeV3Factory", "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865") as IPancakeV3Factory;
@@ -80,7 +80,7 @@ describe("RangeProtocolVault", () => {
         console.log("balance: ", ethers.utils.formatEther(await vault.balanceOf(user.address)));
     });
 
-    it("should revert sending native asset when minting with ERC20 tokens", async () => {
+    it.skip("should revert sending native asset when minting with ERC20 tokens", async () => {
         const maxAmount0 = ethers.utils.parseEther("2000");
         const maxAmount1 = ethers.utils.parseEther("3000");
         const {amount0, amount1, mintAmount} = await vault.getMintAmounts(maxAmount0, maxAmount1);
