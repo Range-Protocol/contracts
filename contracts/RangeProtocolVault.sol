@@ -72,7 +72,7 @@ contract RangeProtocolVault is
         int24 _tickSpacing,
         bytes memory data
     ) external override initializer {
-        (address manager, string memory _name, string memory _symbol, address weth9) = abi.decode(
+        (address manager, string memory _name, string memory _symbol, address _WETH9) = abi.decode(
             data,
             (address, string, string, address)
         );
@@ -90,7 +90,7 @@ contract RangeProtocolVault is
         state.poolData.token1 = IERC20Upgradeable(state.poolData.pool.token1());
         state.poolData.tickSpacing = _tickSpacing;
         state.poolData.factory = msg.sender;
-        state.poolData.WETH9 = weth9;
+        state.poolData.WETH9 = _WETH9;
 
         state.feeData.performanceFee = 250;
         state.feeData.managingFee = 0;

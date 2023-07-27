@@ -192,29 +192,29 @@ library LogicLib {
             userData.users.push(msg.sender);
         }
         if (amount0 > 0) {
+            userData.vaults[msg.sender].token0 += amount0;
             address WETH9 = poolData.WETH9;
             address token0 = address(poolData.token0);
-            userData.vaults[msg.sender].token0 += amount0;
             PeripheryPaymentsLib.pay(
-                WETH9,
+                poolData.WETH9,
                 token0,
                 msg.sender,
                 address(this),
                 uint256(amount0),
-                depositNative && WETH9 == token0
+                depositNative && token0 == WETH9
             );
         }
         if (amount1 > 0) {
+            userData.vaults[msg.sender].token1 += amount1;
             address WETH9 = poolData.WETH9;
             address token1 = address(poolData.token1);
-            userData.vaults[msg.sender].token1 += amount1;
             PeripheryPaymentsLib.pay(
                 WETH9,
                 token1,
                 msg.sender,
                 address(this),
                 uint256(amount1),
-                depositNative && WETH9 == token1
+                depositNative && token1 == WETH9
             );
         }
 
@@ -235,8 +235,8 @@ library LogicLib {
                 ""
             );
         }
-
         emit Minted(msg.sender, mintAmount, amount0, amount1);
+        PeripheryPaymentsLib.refundETH();
     }
 
     /**
@@ -263,16 +263,19 @@ library LogicLib {
             amount0,
             amount1
         );
+        address WETH9 = poolData.WETH9;
+        address token0 = address(poolData.token0);
+        address token1 = address(poolData.token1);
         if (amount0AfterFee > 0) {
             userData.vaults[msg.sender].token0 =
                 (userData.vaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
                 balanceBefore;
-            if (withdrawNative && address(poolData.token0) == poolData.WETH9) {
-                PeripheryPaymentsLib.unwrapWETH9(poolData.WETH9, amount0AfterFee, msg.sender);
+            if (withdrawNative && token0 == WETH9) {
+                PeripheryPaymentsLib.unwrapWETH9(WETH9, amount0AfterFee, msg.sender);
             } else {
                 PeripheryPaymentsLib.pay(
-                    poolData.WETH9,
-                    address(poolData.token0),
+                    WETH9,
+                    token0,
                     address(this),
                     msg.sender,
                     uint256(amount0AfterFee),
@@ -285,12 +288,12 @@ library LogicLib {
                 (userData.vaults[msg.sender].token1 * (balanceBefore - burnAmount)) /
                 balanceBefore;
 
-            if (withdrawNative && address(poolData.token1) == poolData.WETH9) {
-                PeripheryPaymentsLib.unwrapWETH9(poolData.WETH9, amount1AfterFee, msg.sender);
+            if (withdrawNative && token1 == WETH9) {
+                PeripheryPaymentsLib.unwrapWETH9(WETH9, amount1AfterFee, msg.sender);
             } else {
                 PeripheryPaymentsLib.pay(
-                    poolData.WETH9,
-                    address(poolData.token1),
+                    WETH9,
+                    token1,
                     address(this),
                     msg.sender,
                     uint256(amount1AfterFee),
@@ -298,7 +301,6 @@ library LogicLib {
                 );
             }
         }
-
         emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
     }
 

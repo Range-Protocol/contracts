@@ -27,7 +27,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         enabled: true,
-        url: "https://1rpc.io/bnb",
+        url: "",
       },
       allowUnlimitedContractSize: true,
     },
