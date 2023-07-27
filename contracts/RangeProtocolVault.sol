@@ -60,7 +60,9 @@ contract RangeProtocolVault is
         _disableInitializers();
     }
 
-    receive() external payable {}
+    receive() external payable {
+        require(msg.sender == WETH9);
+    }
 
     /**
      * @notice initialize initializes the vault contract and is called right after proxy deployment
@@ -75,9 +77,9 @@ contract RangeProtocolVault is
         int24 _tickSpacing,
         bytes memory data
     ) external override initializer {
-        (address manager, string memory _name, string memory _symbol) = abi.decode(
+        (address manager, string memory _name, string memory _symbol, address _WETH9) = abi.decode(
             data,
-            (address, string, string)
+            (address, string, string, address)
         );
 
         __UUPSUpgradeable_init();
@@ -93,6 +95,8 @@ contract RangeProtocolVault is
         token1 = IERC20Upgradeable(pool.token1());
         tickSpacing = _tickSpacing;
         factory = msg.sender;
+
+        WETH9 = _WETH9;
 
         performanceFee = 250;
         managingFee = 0;
@@ -211,14 +215,15 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
-        NativeTokenSupport.acceptUserDeposit(
+        NativeTokenSupport.processDeposit(
             userVaults[msg.sender],
             users,
             depositNative,
             token0,
             token1,
             amount0,
-            amount1
+            amount1,
+            WETH9
         );
 
         _mint(msg.sender, mintAmount);
@@ -232,8 +237,10 @@ contract RangeProtocolVault is
             );
             pool.mint(address(this), lowerTick, upperTick, liquidityMinted, "");
         }
-
         emit Minted(msg.sender, mintAmount, amount0, amount1);
+
+        if (address(this).balance != 0)
+            msg.sender.call{value: address(this).balance}("");
     }
 
     /**
@@ -253,7 +260,7 @@ contract RangeProtocolVault is
 
         _applyManagingFee(amount0, amount1);
         (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
-        NativeTokenSupport.redeemUserDeposit(
+        NativeTokenSupport.processWithdraw(
             userVaults[msg.sender],
             withdrawNative,
             burnAmount,
@@ -261,7 +268,8 @@ contract RangeProtocolVault is
             token0,
             token1,
             amount0,
-            amount1
+            amount1,
+            WETH9
         );
 
         emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);

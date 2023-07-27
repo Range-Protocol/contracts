@@ -9,7 +9,7 @@ import {
   RangeProtocolVault,
   RangeProtocolFactory,
   NativeTokenSupport,
-  IWBNB,
+  IWETH9,
 } from "../typechain";
 import {
   bn,
@@ -21,12 +21,11 @@ import {
 } from "./common";
 import { beforeEach } from "mocha";
 import { BigNumber } from "ethers";
-import { min } from "hardhat/internal/util/bigint";
 
 let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
 let vault: RangeProtocolVault;
-let pancakeV3Pool: IPancakeV3Factory;
+let pancakeV3Factory: IPancakeV3Factory;
 let pancakev3Pool: IPancakeV3Pool;
 let nativeTokenSupport: NativeTokenSupport;
 let token0: IERC20;
@@ -44,10 +43,10 @@ let initializeData: any;
 const lowerTick = -880000;
 const upperTick = 880000;
 
-describe.only("RangeProtocolVault", () => {
+describe("RangeProtocolVault", () => {
   before(async () => {
     [manager, nonManager, user2, newManager] = await ethers.getSigners();
-    pancakeV3Pool = (await ethers.getContractAt(
+    pancakeV3Factory = (await ethers.getContractAt(
       "IPancakeV3Factory",
       "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
     )) as IPancakeV3Factory;
@@ -56,14 +55,14 @@ describe.only("RangeProtocolVault", () => {
       "RangeProtocolFactory"
     );
     factory = (await RangeProtocolFactory.deploy(
-      pancakeV3Pool.address
+        pancakeV3Factory.address
     )) as RangeProtocolFactory;
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
     token0 = (await ethers.getContractAt(
-      "IWBNB",
+      "IWETH9",
       "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
-    )) as IWBNB;
+    )) as IWETH9;
     token1 = (await MockERC20.deploy()) as IERC20;
 
     setStorageAt(
@@ -85,10 +84,10 @@ describe.only("RangeProtocolVault", () => {
       token1 = tmp;
     }
 
-    await pancakeV3Pool.createPool(token0.address, token1.address, poolFee);
+    await pancakeV3Factory.createPool(token0.address, token1.address, poolFee);
     pancakev3Pool = (await ethers.getContractAt(
       "IPancakeV3Pool",
-      await pancakeV3Pool.getPool(token0.address, token1.address, poolFee)
+      await pancakeV3Factory.getPool(token0.address, token1.address, poolFee)
     )) as IPancakeV3Pool;
 
     await pancakev3Pool.initialize(encodePriceSqrt("1", "1"));
@@ -98,6 +97,7 @@ describe.only("RangeProtocolVault", () => {
       managerAddress: manager.address,
       name,
       symbol,
+      WETH9: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
     });
 
     const NativeTokenSupport = await ethers.getContractFactory(
@@ -137,7 +137,7 @@ describe.only("RangeProtocolVault", () => {
 
   it("should not reinitialize the vault", async () => {
     await expect(
-      vault.initialize(pancakeV3Pool.address, 1, "0x")
+      vault.initialize(pancakev3Pool.address, 1, "0x")
     ).to.be.revertedWith("Initializable: contract is already initialized");
   });
 

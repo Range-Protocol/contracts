@@ -80,6 +80,7 @@ describe("RangeProtocolFactory", () => {
       managerAddress: owner.address,
       name,
       symbol,
+      WETH9: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
     });
   });
 
