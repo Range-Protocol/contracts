@@ -31,6 +31,6 @@ abstract contract RangeProtocolVaultStorage {
     }
     mapping(address => UserVault) public userVaults;
     address[] public users;
-    address WETH9;
+    address public WETH9;
     // NOTE: Only add more state variable below it and do not change the order of above state variables.
 }
