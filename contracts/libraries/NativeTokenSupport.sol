@@ -24,10 +24,14 @@ library NativeTokenSupport {
             userVault.exists = true;
             users.push(msg.sender);
         }
-        bool isToken0Native = address(token0) == WETH9;
+
+        (bool isToken0Native, bool isToken1Native) = (
+            address(token0) == WETH9,
+            address(token1) == WETH9
+        );
         if (amount0 != 0) {
             userVault.token0 += amount0;
-            if (depositNative && isToken0Native) {
+            if (isToken0Native && depositNative) {
                 if (msg.value < amount0) {
                     revert NativeTokenSupportErrors.InsufficientNativeTokenAmount(msg.value);
                 }
@@ -38,8 +42,8 @@ library NativeTokenSupport {
         }
 
         if (amount1 != 0) {
-            userVault.token1 += amount0;
-            if (depositNative && !isToken0Native) {
+            userVault.token1 += amount1;
+            if (isToken1Native && depositNative) {
                 if (msg.value < amount1) {
                     revert NativeTokenSupportErrors.InsufficientNativeTokenAmount(msg.value);
                 }
@@ -61,11 +65,14 @@ library NativeTokenSupport {
         uint256 amount1,
         address WETH9
     ) external {
-        bool isToken0Native = address(token0) == WETH9;
+        (bool isToken0Native, bool isToken1Native) = (
+            address(token0) == WETH9,
+            address(token1) == WETH9
+        );
         uint256 weth9Amount = 0;
         if (amount0 != 0) {
             userVault.token0 = (userVault.token0 * (balanceBefore - burnAmount)) / balanceBefore;
-            if (withdrawNative && isToken0Native) {
+            if (isToken0Native && withdrawNative) {
                 IWETH9(WETH9).withdraw(amount0);
                 weth9Amount = amount0;
             } else {
@@ -74,7 +81,7 @@ library NativeTokenSupport {
         }
         if (amount1 != 0) {
             userVault.token1 = (userVault.token1 * (balanceBefore - burnAmount)) / balanceBefore;
-            if (withdrawNative && !isToken0Native) {
+            if (isToken1Native && withdrawNative) {
                 IWETH9(WETH9).withdraw(amount1);
                 weth9Amount = amount1;
             } else {

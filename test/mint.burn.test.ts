@@ -29,7 +29,7 @@ const WETH9 = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 const poolFee = 10000;
 let isToken0Native: boolean;
 
-describe.only("RangeProtocolVault", () => {
+describe("RangeProtocolVault", () => {
     before(async () => {
         [user] = await ethers.getSigners();
         const pancakeFactory = await ethers.getContractAt("IPancakeV3Factory", "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865") as IPancakeV3Factory;

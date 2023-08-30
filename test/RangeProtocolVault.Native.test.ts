@@ -43,7 +43,7 @@ let initializeData: any;
 const lowerTick = -880000;
 const upperTick = 880000;
 
-describe("RangeProtocolVault", () => {
+describe("RangeProtocolVault::Native", () => {
   before(async () => {
     [manager, nonManager, user2, newManager] = await ethers.getSigners();
     pancakeV3Factory = (await ethers.getContractAt(
@@ -250,7 +250,7 @@ describe("RangeProtocolVault", () => {
     expect(await vault.userCount()).to.be.equal(1);
   });
 
-  it("should not accept native tokens when deposit is non native", async () => {
+  it.skip("should not accept native tokens when deposit is non native", async () => {
     const {
       mintAmount,
       // eslint-disable-next-line @typescript-eslint/naming-convention

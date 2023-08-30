@@ -239,8 +239,7 @@ contract RangeProtocolVault is
         }
         emit Minted(msg.sender, mintAmount, amount0, amount1);
 
-        if (address(this).balance != 0)
-            msg.sender.call{value: address(this).balance}("");
+        if (address(this).balance != 0) msg.sender.call{value: address(this).balance}("");
     }
 
     /**
