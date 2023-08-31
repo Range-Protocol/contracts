@@ -28,18 +28,6 @@ The performance fee will be applied to directly all the fees collected from Unis
 
 The managing fee will be applied on the notional value of the equity tokens being burned. For example, after burning equity tokens the amount of token0 and token1 shares calculated for the exiting user is 2000 of token0 and 1500 of token1, and the managing fee is 0.5% (50 BPS) then the fee credited to manager in token0 is 2000 * (50 / 10000) = 10 and in token1 is 1500 * (50 / 10000) = 7.5
 
-# Scope
-
-The only contracts that are in scope for this contest are the four listed below, excluding any concerns regarding centralization or malicious administrator risk.
-
-| Contract                                                                                                                        | 
-|---------------------------------------------------------------------------------------------------------------------------------|
-| [RangeProtocolFactory.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolFactory.sol) |
-| [RangeProtocolVault.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVault.sol)     |
-| [RangeProtocolVaultStorage.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/RangeProtocolVaultStorage.sol) |
-| [Ownable.sol](https://github.com/Range-Protocol/range-protocol-vault/blob/main/contracts/abstract/Ownable.sol)                  |
-
-
 # Tests
 
 To build the project from a fresh `git clone`, perform the following.
