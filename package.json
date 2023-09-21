@@ -13,7 +13,8 @@
     "postinstall": "yarn husky install",
     "test": "npx hardhat test",
     "verify": "npx hardhat etherscan-verify",
-    "prettier": "prettier --write 'contracts/**/**/*.sol'"
+    "prettier": "prettier --write 'contracts/**/**/*.sol'",
+    "size": "npx hardhat size-contracts"
   },
   "devDependencies": {
     "@anders-t/ethers-ledger": "^1.0.4",
@@ -41,6 +42,7 @@
     "ethereum-waffle": "3.3.0",
     "ethers": "5.6.2",
     "hardhat": "2.12.7",
+    "hardhat-contract-sizer": "^2.10.0",
     "hardhat-deploy": "0.9.14",
     "hardhat-gas-reporter": "^1.0.9",
     "husky": "6.0.0",
@@ -59,5 +61,8 @@
   "lint-staged": {
     "*.{ts,js}": "eslint -c .eslintrc.json"
   },
-  "version": "0.0.0"
+  "version": "0.0.0",
+  "dependencies": {
+    "decimal.js": "^10.4.3"
+  }
 }

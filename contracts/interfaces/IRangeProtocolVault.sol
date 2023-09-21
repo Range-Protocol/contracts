@@ -42,7 +42,11 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
 
     function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
-    function mint(uint256 mintAmount) external returns (uint256 amount0, uint256 amount1);
+    function mint(
+        uint256 amount0ToAdd,
+        uint256 amount1ToAdd,
+        uint256 mintAmount
+    ) external returns (uint256 amount0, uint256 amount1);
 
     function burn(uint256 burnAmount) external returns (uint256 amount0, uint256 amount1);
 

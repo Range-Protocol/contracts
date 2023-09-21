@@ -106,10 +106,9 @@ describe("RangeProtocolVault", () => {
   });
 
   it("should not mint when vault is not initialized", async () => {
-    await expect(vault.mint(amount0)).to.be.revertedWithCustomError(
-      vault,
-      "MintNotStarted"
-    );
+    await expect(
+      vault.mint(amount0, amount1, 1111)
+    ).to.be.revertedWithCustomError(vault, "MintNotStarted");
   });
 
   it("non-manager should not be able to updateTicks", async () => {
@@ -153,10 +152,9 @@ describe("RangeProtocolVault", () => {
 
   it("should not allow minting with zero mint amount", async () => {
     const mintAmount = 0;
-    await expect(vault.mint(mintAmount)).to.be.revertedWithCustomError(
-      vault,
-      "InvalidMintAmount"
-    );
+    await expect(
+      vault.mint(amount0, amount1, mintAmount)
+    ).to.be.revertedWithCustomError(vault, "InvalidMintAmount");
   });
 
   it("should not mint when contract is paused", async () => {
@@ -166,9 +164,15 @@ describe("RangeProtocolVault", () => {
       .withArgs(manager.address);
     expect(await vault.paused()).to.be.equal(true);
 
-    const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
+    const {
+      amount0: amount0ToAdd,
+      amount1: amount1ToAdd,
+      mintAmount,
+    } = await vault.getMintAmounts(amount0, amount1);
 
-    await expect(vault.mint(mintAmount)).to.be.revertedWith("Pausable: paused");
+    await expect(
+      vault.mint(amount0ToAdd, amount1ToAdd, mintAmount)
+    ).to.be.revertedWith("Pausable: paused");
     await expect(vault.unpause())
       .to.emit(vault, "Unpaused")
       .withArgs(manager.address);
@@ -189,9 +193,14 @@ describe("RangeProtocolVault", () => {
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
     expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(0);
 
-    await expect(vault.mint(mintAmount))
+    await expect(vault.mint(_amount0, _amount1, mintAmount))
       .to.emit(vault, "Minted")
-      .withArgs(manager.address, mintAmount, _amount0, _amount1);
+      .withArgs(
+        manager.address,
+        mintAmount.sub(bn(10).pow(bn(3))),
+        _amount0,
+        _amount1
+      );
 
     expect(await vault.totalSupply()).to.be.equal(mintAmount);
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(_amount0);
@@ -227,7 +236,7 @@ describe("RangeProtocolVault", () => {
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
 
     expect(await vault.totalSupply()).to.not.be.equal(0);
-    await expect(vault.mint(mintAmount))
+    await expect(vault.mint(_amount0, _amount1, mintAmount))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -266,11 +275,15 @@ describe("RangeProtocolVault", () => {
     const userVault0 = (await vault.userVaults(manager.address)).token0;
     const userVault1 = (await vault.userVaults(manager.address)).token1;
 
-    const vault0Moved = userVault0.sub(userVault0.mul(userBalance.sub(transferAmount)).div(userBalance));
-    const vault1Moved = userVault1.sub(userVault1.mul(userBalance.sub(transferAmount)).div(userBalance));
+    const vault0Moved = userVault0.sub(
+      userVault0.mul(userBalance.sub(transferAmount)).div(userBalance)
+    );
+    const vault1Moved = userVault1.sub(
+      userVault1.mul(userBalance.sub(transferAmount)).div(userBalance)
+    );
     await vault.transfer(user2.address, transferAmount);
 
-    let userVaults = (await vault.getUserVaults(0, 2));
+    let userVaults = await vault.getUserVaults(0, 2);
     expect(userVaults[0].user).to.be.equal(manager.address);
     expect(userVaults[0].token0).to.be.equal(userVault0.sub(vault0Moved));
     expect(userVaults[0].token1).to.be.equal(userVault1.sub(vault1Moved));
@@ -285,7 +298,7 @@ describe("RangeProtocolVault", () => {
     const user2Vault1 = (await vault.userVaults(user2.address)).token1;
     await vault.connect(user2).transfer(manager.address, user2Balance);
 
-    userVaults = (await vault.getUserVaults(0, 2));
+    userVaults = await vault.getUserVaults(0, 2);
     expect(userVaults[0].token0).to.be.equal(userVault0);
     expect(userVaults[0].token1).to.be.equal(userVault1);
 
@@ -352,12 +365,16 @@ describe("RangeProtocolVault", () => {
   });
 
   it("should not add liquidity when total supply is zero and vault is out of the pool", async () => {
-    const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-    await vault.mint(mintAmount);
+    const {
+      amount0: amount0ToAdd,
+      amount1: amount1ToAdd,
+      mintAmount,
+    } = await vault.getMintAmounts(amount0, amount1);
+    await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
     await vault.removeLiquidity();
     await vault.burn(await vault.balanceOf(manager.address));
 
-    await expect(vault.mint(mintAmount)).to.be.revertedWithCustomError(
+    await expect(vault.mint(0, 0, 1)).to.be.revertedWithCustomError(
       vault,
       "MintNotAllowed"
     );
@@ -399,8 +416,12 @@ describe("RangeProtocolVault", () => {
     beforeEach(async () => {
       await token0.approve(vault.address, amount0.mul(bn(2)));
       await token1.approve(vault.address, amount1.mul(bn(2)));
-      const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount);
+      const {
+        amount0: amount0ToAdd,
+        amount1: amount1ToAdd,
+        mintAmount,
+      } = await vault.getMintAmounts(amount0, amount1);
+      await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
     });
 
     it("should not remove liquidity by non-manager", async () => {
@@ -486,8 +507,12 @@ describe("RangeProtocolVault", () => {
     beforeEach(async () => {
       await token0.approve(vault.address, amount0.mul(bn(2)));
       await token1.approve(vault.address, amount1.mul(bn(2)));
-      const { mintAmount } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount);
+      const {
+        amount0: amount0ToAdd,
+        amount1: amount1ToAdd,
+        mintAmount,
+      } = await vault.getMintAmounts(amount0, amount1);
+      await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
       await vault.removeLiquidity();
     });
 
@@ -534,7 +559,12 @@ describe("RangeProtocolVault", () => {
       const { amount0Current, amount1Current } =
         await vault.getUnderlyingBalances();
 
-      await vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current);
+      await vault.addLiquidity(
+        lowerTick,
+        upperTick,
+        amount0Current,
+        amount1Current
+      );
 
       await expect(
         vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
@@ -579,18 +609,39 @@ describe("RangeProtocolVault", () => {
       const managerBalance1Before = await token1.balanceOf(manager.address);
       await vault.connect(manager).collectManager();
 
-      const performanceFee0 = fee0
-        .mul(await vault.performanceFee())
-        .div(10_000);
-      const performanceFee1 = fee0
-        .mul(await vault.performanceFee())
-        .div(10_000);
-
       expect(await token0.balanceOf(manager.address)).to.be.equal(
-        managerBalance0Before.add(managerBalance0).add(performanceFee0)
+        managerBalance0Before.add(managerBalance0)
       );
       expect(await token1.balanceOf(manager.address)).to.be.equal(
-        managerBalance1Before.add(managerBalance1).add(performanceFee1)
+        managerBalance1Before.add(managerBalance1)
+      );
+
+      expect(await vault.managerBalance0()).to.be.equal(0);
+      expect(await vault.managerBalance1()).to.be.equal(0);
+    });
+
+    it("pull fee using updateFee function", async () => {
+      const { sqrtPriceX96 } = await univ3Pool.slot0();
+      const liquidity = await univ3Pool.liquidity();
+      await token1.transfer(vault.address, amount1);
+      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
+      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      const { fee0, fee1 } = await vault.getCurrentFees();
+      await expect(vault.updateFees(0, 0))
+        .to.emit(vault, "FeesEarned")
+        .withArgs(fee0, fee1);
+
+      const managerBalance0 = await vault.managerBalance0();
+      const managerBalance1 = await vault.managerBalance1();
+      const managerBalance0Before = await token0.balanceOf(manager.address);
+      const managerBalance1Before = await token1.balanceOf(manager.address);
+      await vault.connect(manager).collectManager();
+
+      expect(await token0.balanceOf(manager.address)).to.be.equal(
+        managerBalance0Before.add(managerBalance0)
+      );
+      expect(await token1.balanceOf(manager.address)).to.be.equal(
+        managerBalance1Before.add(managerBalance1)
       );
 
       expect(await vault.managerBalance0()).to.be.equal(0);

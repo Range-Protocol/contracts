@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { Decimal } from "decimal.js";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {
   IERC20,
@@ -161,9 +161,14 @@ describe("RangeProtocolVault::exposure", () => {
       amount1: amount1Mint1,
     } = await vault.getMintAmounts(amount0, amount1);
 
-    await expect(vault.mint(mintAmount1))
+    await expect(vault.mint(amount0Mint1, amount1Mint1, mintAmount1))
       .to.emit(vault, "Minted")
-      .withArgs(manager.address, mintAmount1, amount0Mint1, amount1Mint1);
+      .withArgs(
+        manager.address,
+        mintAmount1.sub(bn(10).pow(bn(3))),
+        amount0Mint1,
+        amount1Mint1
+      );
 
     console.log("Users 1:");
     console.log("mint amount: ", mintAmount1.toString());
@@ -182,8 +187,9 @@ describe("RangeProtocolVault::exposure", () => {
     await token0.connect(newManager).approve(vault.address, amount0Mint2);
     await token1.connect(newManager).approve(vault.address, amount1Mint2);
 
-    await vault.connect(newManager).mint(mintAmount2);
-
+    await vault
+      .connect(newManager)
+      .mint(amount0Mint2, amount1Mint2, mintAmount2);
     console.log("Users 2:");
     console.log("mint amount: ", mintAmount1.toString());
     console.log("token0 amount: ", amount0Mint2.toString());
@@ -238,7 +244,9 @@ describe("RangeProtocolVault::exposure", () => {
       (await vault.balanceOf(newManager.address)).toString()
     );
 
-    await vault.connect(newManager).mint(mintAmount3);
+    await vault
+      .connect(newManager)
+      .mint(amount0Mint3, amount1Mint3, mintAmount3);
     console.log(
       "vault shares after: ",
       (await vault.balanceOf(newManager.address)).toString()
@@ -294,7 +302,7 @@ describe("RangeProtocolVault::exposure", () => {
     );
     const mockSqrtPriceMath = await MockSqrtPriceMath.deploy();
 
-    const { sqrtPriceX96 } = await univ3Pool.slot0();
+    let { sqrtPriceX96 } = await univ3Pool.slot0();
     const liquidity = await univ3Pool.liquidity();
 
     const nextPrice = currentAmountBaseToken.gt(initialAmountBaseToken)
@@ -327,12 +335,45 @@ describe("RangeProtocolVault::exposure", () => {
     console.log("token1 amount: ", amount1Current4.toString());
     console.log("==================================================");
 
+    const MockLiquidityAmounts = await ethers.getContractFactory(
+      "MockLiquidityAmounts"
+    );
+    const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
+
+    ({ sqrtPriceX96 } = await univ3Pool.slot0());
+    const sqrtPriceA = new Decimal(1.0001)
+      .pow(lowerTick)
+      .sqrt()
+      .mul(new Decimal(2).pow(96))
+      .round()
+      .toFixed();
+    const sqrtPriceB = new Decimal(1.0001)
+      .pow(upperTick)
+      .sqrt()
+      .mul(new Decimal(2).pow(96))
+      .round()
+      .toFixed();
+    const liquidityToAdd = await mockLiquidityAmounts.getLiquidityForAmounts(
+      sqrtPriceX96,
+      sqrtPriceA,
+      sqrtPriceB,
+      await token0.balanceOf(vault.address),
+      await token1.balanceOf(vault.address)
+    );
+    const { amount0: amount0ToAdd, amount1: amount1ToAdd } =
+      await mockLiquidityAmounts.getAmountsForLiquidity(
+        sqrtPriceX96,
+        sqrtPriceA,
+        sqrtPriceB,
+        liquidityToAdd
+      );
+
     console.log("Add liquidity back to the uniswap v3 pool");
     await vault.addLiquidity(
       lowerTick,
       upperTick,
-      amount0Current4,
-      amount1Current4
+      amount0ToAdd.sub(await vault.managerBalance0()),
+      amount1ToAdd.sub(await vault.managerBalance1())
     );
 
     console.log("==================================================");
@@ -363,10 +404,14 @@ describe("RangeProtocolVault::exposure", () => {
 
     console.log("==================================================");
     console.log("Vault balance after user2 withdraws liquidity");
+    await vault.collectManager();
     const { amount0Current: amount0Current7, amount1Current: amount1Current7 } =
       await vault.getUnderlyingBalances();
     console.log("token0 amount: ", amount0Current7.toString());
     console.log("token1 amount: ", amount1Current7.toString());
     console.log("==================================================");
+    console.log((await token0.balanceOf(vault.address)).toString());
+    console.log((await token1.balanceOf(vault.address)).toString());
+    console.log((await vault.totalSupply()).toString());
   });
 });

@@ -51,9 +51,12 @@ contract RangeProtocolVault is
     using TickMath for int24;
 
     /// Performance fee cannot be set more than 10% of the fee earned from uniswap v3 pool.
-    uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
+    uint16 private constant MAX_PERFORMANCE_FEE_BPS = 1000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
-    uint16 public constant MAX_MANAGING_FEE_BPS = 100;
+    uint16 private constant MAX_MANAGING_FEE_BPS = 100;
+
+    /// creating dead shares to protect against the slippage for first minter
+    uint256 private constant MINIMUM_SHARES = 10 ** 3;
 
     constructor() {
         _disableInitializers();
@@ -77,6 +80,8 @@ contract RangeProtocolVault is
             (address, string, string)
         );
 
+        // reverts if manager address provided is zero.
+        if (manager == address(0x0)) revert VaultErrors.ZeroManagerAddress();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Ownable_init();
@@ -91,21 +96,20 @@ contract RangeProtocolVault is
         tickSpacing = _tickSpacing;
         factory = msg.sender;
 
-        performanceFee = 250;
-        managingFee = 0;
-        // Managing fee is 0% at the time vault initialization.
-        emit FeesUpdated(0, performanceFee);
+        // Managing fee is 0% and performanceFee is 2.5% at the time vault initialization.
+        _updateFees(0, 250);
     }
 
     /**
      * @notice updateTicks it is called by the contract manager to update the ticks.
-     * It can only be called once total supply is zero and the vault has not active position
+     * It can only be called once total supply is less than MINIMUM_SHARES and the vault has not active position
      * in the uniswap pool
      * @param _lowerTick lowerTick to set
      * @param _upperTick upperTick to set
      */
     function updateTicks(int24 _lowerTick, int24 _upperTick) external override onlyManager {
-        if (totalSupply() != 0 || inThePosition) revert VaultErrors.NotAllowedToUpdateTicks();
+        if (totalSupply() > MINIMUM_SHARES || inThePosition)
+            revert VaultErrors.NotAllowedToUpdateTicks();
         _updateTicks(_lowerTick, _upperTick);
 
         if (!mintStarted) {
@@ -165,10 +169,14 @@ contract RangeProtocolVault is
      * @notice mint mints range vault shares, fractional shares of a Uniswap V3 position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
+     * @param amount0ToAdd amount0 user desires to add.
+     * @param amount1ToAdd amount1 user desires to add.
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
+        uint256 amount0ToAdd,
+        uint256 amount1ToAdd,
         uint256 mintAmount
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
@@ -177,7 +185,7 @@ contract RangeProtocolVault is
         bool _inThePosition = inThePosition;
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
-        if (totalSupply > 0) {
+        if (totalSupply > MINIMUM_SHARES) {
             (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
             amount0 = FullMath.mulDivRoundingUp(amount0Current, mintAmount, totalSupply);
             amount1 = FullMath.mulDivRoundingUp(amount1Current, mintAmount, totalSupply);
@@ -199,6 +207,8 @@ contract RangeProtocolVault is
             // Manager must call initialize function with valid tick ranges to enable the minting again.
             revert VaultErrors.MintNotAllowed();
         }
+        // validate that there is no slippage caused by front-running.
+        _validateSlippageThreshold(amount0, amount0ToAdd, amount1, amount1ToAdd);
 
         if (!userVaults[msg.sender].exists) {
             userVaults[msg.sender].exists = true;
@@ -213,6 +223,13 @@ contract RangeProtocolVault is
             token1.safeTransferFrom(msg.sender, address(this), amount1);
         }
 
+        if (totalSupply == 0) {
+            // mint dead shares to protect the slippage against first minter like Uniswap V2 does.
+            // https://github.com/Uniswap/v2-core/blob/ee547b17853e71ed4e0101ccfd52e70d5acded58/contracts/UniswapV2Pair.sol#L120
+            // https://blog.openzeppelin.com/a-novel-defense-against-erc4626-inflation-attacks
+            mintAmount -= MINIMUM_SHARES;
+            _mint(0x000000000000000000000000000000000000dEaD, MINIMUM_SHARES);
+        }
         _mint(msg.sender, mintAmount);
         if (_inThePosition) {
             uint128 liquidityMinted = LiquidityAmounts.getLiquidityForAmounts(
@@ -266,21 +283,21 @@ contract RangeProtocolVault is
         }
 
         _applyManagingFee(amount0, amount1);
-        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
+        (amount0, amount1) = _netManagingFees(amount0, amount1);
         if (amount0 > 0) {
             userVaults[msg.sender].token0 =
                 (userVaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
                 balanceBefore;
-            token0.safeTransfer(msg.sender, amount0AfterFee);
+            token0.safeTransfer(msg.sender, amount0);
         }
         if (amount1 > 0) {
             userVaults[msg.sender].token1 =
                 (userVaults[msg.sender].token1 * (balanceBefore - burnAmount)) /
                 balanceBefore;
-            token1.safeTransfer(msg.sender, amount1AfterFee);
+            token1.safeTransfer(msg.sender, amount1);
         }
 
-        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
+        emit Burned(msg.sender, burnAmount, amount0, amount1);
     }
 
     /**
@@ -347,8 +364,6 @@ contract RangeProtocolVault is
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
-     * @return remainingAmount0 remaining amount from amount0
-     * @return remainingAmount1 remaining amount from amount1
      */
     function addLiquidity(
         int24 newLowerTick,
@@ -356,7 +371,6 @@ contract RangeProtocolVault is
         uint256 amount0,
         uint256 amount1
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        _validateTicks(newLowerTick, newUpperTick);
         if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -376,7 +390,9 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
-
+            // validate that there is no slippage caused by front-running.
+            _validateSlippageThreshold(amount0, amountDeposited0, amount1, amountDeposited1);
+            _updateTicks(newLowerTick, newUpperTick);
             emit LiquidityAdded(
                 baseLiquidity,
                 newLowerTick,
@@ -388,12 +404,6 @@ contract RangeProtocolVault is
             // Should return remaining token number for swap
             remainingAmount0 = amount0 - amountDeposited0;
             remainingAmount1 = amount1 - amountDeposited1;
-            lowerTick = newLowerTick;
-            upperTick = newUpperTick;
-            emit TicksSet(newLowerTick, newUpperTick);
-
-            inThePosition = true;
-            emit InThePositionStatusSet(true);
         }
     }
 
@@ -402,10 +412,7 @@ contract RangeProtocolVault is
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
-        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
-        _applyPerformanceFee(fee0, fee1);
-        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        emit FeesEarned(fee0, fee1);
+        _pullFeeFromPool();
     }
 
     /// @notice collectManager collects manager fees accrued
@@ -430,12 +437,7 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
-
-        managingFee = newManagingFee;
-        performanceFee = newPerformanceFee;
-        emit FeesUpdated(newManagingFee, newPerformanceFee);
+        _updateFees(newManagingFee, newPerformanceFee);
     }
 
     /**
@@ -452,9 +454,10 @@ contract RangeProtocolVault is
     ) external view override returns (uint256 amount0, uint256 amount1, uint256 mintAmount) {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
         uint256 totalSupply = totalSupply();
-        if (totalSupply > 0) {
+        if (totalSupply > MINIMUM_SHARES) {
+            // there is atleast one vault share holder.
             (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
-        } else {
+        } else if (inThePosition) {
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
             uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
@@ -845,5 +848,50 @@ contract RangeProtocolVault is
             _lowerTick % tickSpacing != 0 ||
             _upperTick % tickSpacing != 0
         ) revert VaultErrors.InvalidTicksSpacing();
+    }
+
+    /**
+     * @notice internal function that pulls fee from the pool
+     */
+    function _pullFeeFromPool() private {
+        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
+        _applyPerformanceFee(fee0, fee1);
+        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
+        emit FeesEarned(fee0, fee1);
+    }
+
+    /**
+     * @notice internal function that updates the fee percentages for both performance
+     * and managing fee.
+     * @param newManagingFee new managing fee to set.
+     * @param newPerformanceFee new performance fee to set.
+     */
+    function _updateFees(uint16 newManagingFee, uint16 newPerformanceFee) private {
+        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
+        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
+
+        if (inThePosition) _pullFeeFromPool();
+        managingFee = newManagingFee;
+        performanceFee = newPerformanceFee;
+        emit FeesUpdated(newManagingFee, newPerformanceFee);
+    }
+
+    /**
+     * @notice validates the amounts being added to the pool do not experience slippage from
+     * front-running attacks. The function reverts if the actual amount of either token is less
+     * than the 99% of the amount user desires to deposit.
+     * @param amount0 the token0 amount actually deposited to the pool.
+     * @param amount0ToAdd the token0 amount user desires to add.
+     * @param amount1 the token1 amount actually deposited to the pool.
+     * @param amount1ToAdd the token1 amount user desired to add
+     */
+    function _validateSlippageThreshold(
+        uint256 amount0,
+        uint256 amount0ToAdd,
+        uint256 amount1,
+        uint256 amount1ToAdd
+    ) private pure {
+        if (amount0 < (amount0ToAdd * 9_900) / 10_000 || amount1 < (amount1ToAdd * 9_900) / 10_000)
+            revert VaultErrors.SlippageExceedThreshold();
     }
 }
