@@ -43,26 +43,30 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
     function updateTicks(int24 _lowerTick, int24 _upperTick) external;
 
     function mint(
-        uint256 amount0ToAdd,
-        uint256 amount1ToAdd,
-        uint256 mintAmount
+        uint256 mintAmount,
+        uint256[2] calldata minAmounts
     ) external returns (uint256 amount0, uint256 amount1);
 
-    function burn(uint256 burnAmount) external returns (uint256 amount0, uint256 amount1);
+    function burn(
+        uint256 burnAmount,
+        uint256[2] calldata minAmounts
+    ) external returns (uint256 amount0, uint256 amount1);
 
     function removeLiquidity() external;
 
     function swap(
         bool zeroForOne,
         int256 swapAmount,
-        uint160 sqrtPriceLimitX96
+        uint160 sqrtPriceLimitX96,
+        uint256 minAmountIn
     ) external returns (int256 amount0, int256 amount1);
 
     function addLiquidity(
         int24 newLowerTick,
         int24 newUpperTick,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256[2] calldata minAmounts
     ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);
 
     function collectManager() external;
@@ -78,10 +82,6 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         external
         view
         returns (uint256 amount0Current, uint256 amount1Current);
-
-    function getUnderlyingBalancesAtPrice(
-        uint160 sqrtRatioX96
-    ) external view returns (uint256 amount0Current, uint256 amount1Current);
 
     function getCurrentFees() external view returns (uint256 fee0, uint256 fee1);
 

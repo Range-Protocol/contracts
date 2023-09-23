@@ -18,6 +18,7 @@ import {
 } from "./common";
 import { beforeEach } from "mocha";
 import { BigNumber } from "ethers";
+import { Decimal } from "decimal.js";
 
 let factory: RangeProtocolFactory;
 let vaultImpl: RangeProtocolVault;
@@ -107,7 +108,7 @@ describe("RangeProtocolVault", () => {
 
   it("should not mint when vault is not initialized", async () => {
     await expect(
-      vault.mint(amount0, amount1, 1111)
+      vault.mint(1111, [amount0, amount1])
     ).to.be.revertedWithCustomError(vault, "MintNotStarted");
   });
 
@@ -153,7 +154,7 @@ describe("RangeProtocolVault", () => {
   it("should not allow minting with zero mint amount", async () => {
     const mintAmount = 0;
     await expect(
-      vault.mint(amount0, amount1, mintAmount)
+      vault.mint(mintAmount, [amount0, amount1])
     ).to.be.revertedWithCustomError(vault, "InvalidMintAmount");
   });
 
@@ -171,7 +172,7 @@ describe("RangeProtocolVault", () => {
     } = await vault.getMintAmounts(amount0, amount1);
 
     await expect(
-      vault.mint(amount0ToAdd, amount1ToAdd, mintAmount)
+      vault.mint(mintAmount, [amount0ToAdd, amount1ToAdd])
     ).to.be.revertedWith("Pausable: paused");
     await expect(vault.unpause())
       .to.emit(vault, "Unpaused")
@@ -193,14 +194,9 @@ describe("RangeProtocolVault", () => {
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
     expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(0);
 
-    await expect(vault.mint(_amount0, _amount1, mintAmount))
+    await expect(vault.mint(mintAmount, [_amount0.mul(9900).div(10000), _amount1.mul(9900).div(10000)]))
       .to.emit(vault, "Minted")
-      .withArgs(
-        manager.address,
-        mintAmount.sub(bn(10).pow(bn(3))),
-        _amount0,
-        _amount1
-      );
+      .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
     expect(await vault.totalSupply()).to.be.equal(mintAmount);
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(_amount0);
@@ -221,6 +217,20 @@ describe("RangeProtocolVault", () => {
     expect(await vault.userCount()).to.be.equal(1);
   });
 
+  it("should not mint when min amounts are not satisfied", async () => {
+    const {
+      mintAmount,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount0: _amount0,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      amount1: _amount1,
+    } = await vault.getMintAmounts(amount0, amount1);
+
+    await expect(
+      vault.mint(mintAmount, [_amount0.mul(2), _amount1.mul(2)])
+    ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
+  });
+
   it("should mint with non zero totalSupply", async () => {
     const {
       mintAmount,
@@ -236,7 +246,7 @@ describe("RangeProtocolVault", () => {
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
 
     expect(await vault.totalSupply()).to.not.be.equal(0);
-    await expect(vault.mint(_amount0, _amount1, mintAmount))
+    await expect(vault.mint(mintAmount, [_amount0.mul(9900).div(10000), _amount1.mul(9900).div(10000)]))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -308,9 +318,18 @@ describe("RangeProtocolVault", () => {
 
   it("should not burn non existing vault shares", async () => {
     const burnAmount = parseEther("1");
-    await expect(vault.connect(user2).burn(burnAmount)).to.be.revertedWith(
-      "ERC20: burn amount exceeds balance"
-    );
+    await expect(
+      vault.connect(user2).burn(burnAmount, [0, 0])
+    ).to.be.revertedWith("ERC20: burn amount exceeds balance");
+  });
+
+  it("should not burn when min amounts are not satisfied", async () => {
+    const burnAmount = await vault.balanceOf(manager.address);
+    const { amount0: minAmount0Out, amount1: minAmount1Out } =
+      await vault.getUnderlyingBalancesByShare(burnAmount);
+    await expect(
+      vault.burn(burnAmount, [minAmount0Out.mul(2), minAmount1Out.mul(2)])
+    ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
   });
 
   it("should burn vault shares", async () => {
@@ -335,7 +354,9 @@ describe("RangeProtocolVault", () => {
     const managingFee1 = userBalance1.mul(managingFee).div(10_000);
     const { fee0, fee1 } = await vault.getCurrentFees();
 
-    await expect(vault.burn(burnAmount))
+    const { amount0: amount0Out, amount1: amount1Out } =
+      await vault.getUnderlyingBalancesByShare(burnAmount);
+    await expect(vault.burn(burnAmount, [amount0Out, amount1Out]))
       .to.emit(vault, "FeesEarned")
       .withArgs(fee0, fee1);
     expect(await vault.totalSupply()).to.be.equal(
@@ -370,11 +391,14 @@ describe("RangeProtocolVault", () => {
       amount1: amount1ToAdd,
       mintAmount,
     } = await vault.getMintAmounts(amount0, amount1);
-    await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
+    await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
     await vault.removeLiquidity();
-    await vault.burn(await vault.balanceOf(manager.address));
+    const burnAmount = await vault.balanceOf(manager.address);
+    const { amount0: amount0Out, amount1: amount1Out } =
+      await vault.getUnderlyingBalancesByShare(burnAmount);
+    await vault.burn(burnAmount, [amount0Out, amount1Out]);
 
-    await expect(vault.mint(0, 0, 1)).to.be.revertedWithCustomError(
+    await expect(vault.mint(1, [0, 0])).to.be.revertedWithCustomError(
       vault,
       "MintNotAllowed"
     );
@@ -421,7 +445,7 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
+      await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
     });
 
     it("should not remove liquidity by non-manager", async () => {
@@ -480,7 +504,11 @@ describe("RangeProtocolVault", () => {
       const userBalance1 = amount1Current.mul(vaultShares).div(totalSupply);
       const managingFee1 = userBalance1.mul(managingFee).div(10_000);
 
-      await expect(vault.burn(vaultShares)).not.to.emit(vault, "FeesEarned");
+      const { amount0: amount0Out, amount1: amount1Out } =
+        await vault.getUnderlyingBalancesByShare(vaultShares);
+      await expect(
+        vault.burn(vaultShares, [amount0Out, amount1Out])
+      ).not.to.emit(vault, "FeesEarned");
       expect(await token0.balanceOf(manager.address)).to.be.equal(
         userBalance0Before.add(userBalance0).sub(managingFee0)
       );
@@ -512,7 +540,7 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(amount0ToAdd, amount1ToAdd, mintAmount);
+      await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
       await vault.removeLiquidity();
     });
 
@@ -523,8 +551,23 @@ describe("RangeProtocolVault", () => {
       await expect(
         vault
           .connect(nonManager)
-          .addLiquidity(lowerTick, upperTick, amount0, amount1)
+          .addLiquidity(lowerTick, upperTick, amount0, amount1, [0, 0])
       ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should not add liquidity when min amounts are not satisfied", async () => {
+      const { amount0Current, amount1Current } =
+        await vault.getUnderlyingBalances();
+
+      await expect(
+        vault.addLiquidity(
+          lowerTick,
+          upperTick,
+          amount0Current,
+          amount1Current,
+          [amount0Current, amount1Current.mul(2)]
+        )
+      ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
     });
 
     it("should add liquidity by manager", async () => {
@@ -538,19 +581,43 @@ describe("RangeProtocolVault", () => {
       const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
 
       const { sqrtPriceX96 } = await univ3Pool.slot0();
-      const liquidity = mockLiquidityAmounts.getLiquidityForAmounts(
+      const sqrtPriceA = new Decimal(1.0001)
+        .pow(lowerTick)
+        .sqrt()
+        .mul(new Decimal(2).pow(96))
+        .round()
+        .toFixed();
+      const sqrtPriceB = new Decimal(1.0001)
+        .pow(upperTick)
+        .sqrt()
+        .mul(new Decimal(2).pow(96))
+        .round()
+        .toFixed();
+      const liquidityToAdd = await mockLiquidityAmounts.getLiquidityForAmounts(
         sqrtPriceX96,
-        lowerTick,
-        upperTick,
-        amount0Current,
-        amount1Current
+        sqrtPriceA,
+        sqrtPriceB,
+        await token0.balanceOf(vault.address),
+        await token1.balanceOf(vault.address)
       );
-
+      let { amount0: amount0ToAdd, amount1: amount1ToAdd } =
+        await mockLiquidityAmounts.getAmountsForLiquidity(
+          sqrtPriceX96,
+          sqrtPriceA,
+          sqrtPriceB,
+          liquidityToAdd
+        );
       await expect(
-        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
+        vault.addLiquidity(
+          lowerTick,
+          upperTick,
+          amount0ToAdd,
+          amount1ToAdd,
+          [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]
+        )
       )
         .to.emit(vault, "LiquidityAdded")
-        .withArgs(liquidity, lowerTick, upperTick, anyValue, anyValue)
+        .withArgs(liquidityToAdd, lowerTick, upperTick, anyValue, anyValue)
         .to.emit(vault, "InThePositionStatusSet")
         .withArgs(true);
     });
@@ -563,12 +630,39 @@ describe("RangeProtocolVault", () => {
         lowerTick,
         upperTick,
         amount0Current,
-        amount1Current
+        amount1Current,
+        [amount0Current.mul(9900).div(10000), amount1Current.mul(9900).div(10000)]
       );
+      await expect(
+        vault.addLiquidity(
+          lowerTick,
+          upperTick,
+          amount0Current,
+          amount1Current,
+          [0, 0]
+        )
+      ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
+    });
+  });
+
+  describe("Swap", () => {
+    it("should fail when minAmountIn is not satisfied", async () => {
+      const { sqrtPriceX96 } = await univ3Pool.slot0();
+      const liquidity = await univ3Pool.liquidity();
+      await token1.transfer(vault.address, amount1);
+      const priceDiff = amount1.mul(bn(2).pow(96)).div(liquidity);
+      const priceNext = sqrtPriceX96.add(priceDiff);
+      const ONE = bn(1).mul(bn(2).pow(96));
+      const minAmountIn = ONE.mul(ONE)
+        .div(priceNext)
+        .sub(ONE.mul(ONE).div(sqrtPriceX96))
+        .mul(liquidity)
+        .div(bn(2).pow(96))
+        .mul(2);
 
       await expect(
-        vault.addLiquidity(lowerTick, upperTick, amount0Current, amount1Current)
-      ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
+        vault.swap(false, amount1, priceNext, (-minAmountIn).toString())
+      ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
     });
   });
 
@@ -577,8 +671,17 @@ describe("RangeProtocolVault", () => {
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
       await token1.transfer(vault.address, amount1);
-      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      const priceDiff = amount1.mul(bn(2).pow(96)).div(liquidity);
+      const priceNext = sqrtPriceX96.add(priceDiff);
+      const ONE = bn(1).mul(bn(2).pow(96));
+      let minAmountIn = ONE.mul(ONE)
+        .div(priceNext)
+        .sub(ONE.mul(ONE).div(sqrtPriceX96))
+        .mul(liquidity)
+        .div(bn(2).pow(96));
+
+      minAmountIn = minAmountIn.mul(bn(9_900)).div(bn(10_000));
+      await vault.swap(false, amount1, priceNext, (-minAmountIn).toString());
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())
@@ -594,8 +697,16 @@ describe("RangeProtocolVault", () => {
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
       await token1.transfer(vault.address, amount1);
-      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      const priceDiff = amount1.mul(bn(2).pow(96)).div(liquidity);
+      const priceNext = sqrtPriceX96.add(priceDiff);
+      const ONE = bn(1).mul(bn(2).pow(96));
+      let minAmountIn = ONE.mul(ONE)
+        .div(priceNext)
+        .sub(ONE.mul(ONE).div(sqrtPriceX96))
+        .mul(liquidity)
+        .div(bn(2).pow(bn(96)));
+      minAmountIn = minAmountIn.mul(bn(9_900)).div(bn(10_000));
+      await vault.swap(false, amount1, priceNext, (-minAmountIn).toString());
 
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.pullFeeFromPool())
@@ -624,8 +735,18 @@ describe("RangeProtocolVault", () => {
       const { sqrtPriceX96 } = await univ3Pool.slot0();
       const liquidity = await univ3Pool.liquidity();
       await token1.transfer(vault.address, amount1);
-      const priceNext = amount1.mul(bn(2).pow(96)).div(liquidity);
-      await vault.swap(false, amount1, sqrtPriceX96.add(priceNext));
+      const priceDiff = amount1.mul(bn(2).pow(96)).div(liquidity);
+      const priceNext = sqrtPriceX96.add(priceDiff);
+      const ONE = bn(1).mul(bn(2).pow(96));
+      let minAmountIn = ONE.mul(ONE)
+        .div(priceNext)
+        .sub(ONE.mul(ONE).div(sqrtPriceX96))
+        .mul(liquidity)
+        .div(bn(2).pow(bn(96)));
+
+      minAmountIn = minAmountIn.mul(bn(9_900)).div(bn(10_000));
+
+      await vault.swap(false, amount1, priceNext, (-minAmountIn).toString());
       const { fee0, fee1 } = await vault.getCurrentFees();
       await expect(vault.updateFees(0, 0))
         .to.emit(vault, "FeesEarned")
