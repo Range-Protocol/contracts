@@ -6,4 +6,6 @@ library FactoryErrors {
     error NoVaultInitDataProvided();
     error MismatchedVaultsAndImplsLength();
     error VaultUpgradeFailed();
+    error ImplIsNotAContract();
+    error SameTokensAddresses();
 }

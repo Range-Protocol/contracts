@@ -194,7 +194,12 @@ describe("RangeProtocolVault", () => {
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
     expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(0);
 
-    await expect(vault.mint(mintAmount, [_amount0.mul(9900).div(10000), _amount1.mul(9900).div(10000)]))
+    await expect(
+      vault.mint(mintAmount, [
+        _amount0.mul(9900).div(10000),
+        _amount1.mul(9900).div(10000),
+      ])
+    )
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -246,7 +251,12 @@ describe("RangeProtocolVault", () => {
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
 
     expect(await vault.totalSupply()).to.not.be.equal(0);
-    await expect(vault.mint(mintAmount, [_amount0.mul(9900).div(10000), _amount1.mul(9900).div(10000)]))
+    await expect(
+      vault.mint(mintAmount, [
+        _amount0.mul(9900).div(10000),
+        _amount1.mul(9900).div(10000),
+      ])
+    )
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -391,7 +401,10 @@ describe("RangeProtocolVault", () => {
       amount1: amount1ToAdd,
       mintAmount,
     } = await vault.getMintAmounts(amount0, amount1);
-    await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
+    await vault.mint(mintAmount, [
+      amount0ToAdd.mul(9900).div(10000),
+      amount1ToAdd.mul(9900).div(10000),
+    ]);
     await vault.removeLiquidity();
     const burnAmount = await vault.balanceOf(manager.address);
     const { amount0: amount0Out, amount1: amount1Out } =
@@ -445,7 +458,10 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
+      await vault.mint(mintAmount, [
+        amount0ToAdd.mul(9900).div(10000),
+        amount1ToAdd.mul(9900).div(10000),
+      ]);
     });
 
     it("should not remove liquidity by non-manager", async () => {
@@ -540,7 +556,10 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount, [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]);
+      await vault.mint(mintAmount, [
+        amount0ToAdd.mul(9900).div(10000),
+        amount1ToAdd.mul(9900).div(10000),
+      ]);
       await vault.removeLiquidity();
     });
 
@@ -631,7 +650,10 @@ describe("RangeProtocolVault", () => {
         upperTick,
         amount0Current,
         amount1Current,
-        [amount0Current.mul(9900).div(10000), amount1Current.mul(9900).div(10000)]
+        [
+          amount0Current.mul(9900).div(10000),
+          amount1Current.mul(9900).div(10000),
+        ]
       );
       await expect(
         vault.addLiquidity(
@@ -790,6 +812,13 @@ describe("RangeProtocolVault", () => {
           .connect(nonManager)
           .upgradeVaults([vault.address], [newVaultImpl.address])
       ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("an EOA address provided as implementation should not upgrade the contract", async () => {
+      const newVaultImpl = manager.address;
+      await expect(
+        factory.upgradeVault(vault.address, newVaultImpl)
+      ).to.be.revertedWithCustomError(factory, "ImplIsNotAContract");
     });
 
     it("should upgrade range vault implementation by factory manager", async () => {
