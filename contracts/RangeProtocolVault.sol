@@ -304,13 +304,16 @@ contract RangeProtocolVault is
      * @notice removeLiquidity removes liquidity from uniswap pool and receives underlying tokens
      * in the vault contract.
      */
-    function removeLiquidity() external override onlyManager {
+    function removeLiquidity(uint256[2] calldata minAmounts) external override onlyManager {
         (uint128 liquidity, , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
             int24 _lowerTick = lowerTick;
             int24 _upperTick = upperTick;
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
+
+            if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+                revert VaultErrors.SlippageExceedThreshold();
 
             emit LiquidityRemoved(liquidity, _lowerTick, _upperTick, amount0, amount1);
 

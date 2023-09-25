@@ -52,7 +52,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         uint256[2] calldata minAmounts
     ) external returns (uint256 amount0, uint256 amount1);
 
-    function removeLiquidity() external;
+    function removeLiquidity(uint256[2] calldata minAmounts) external;
 
     function swap(
         bool zeroForOne,

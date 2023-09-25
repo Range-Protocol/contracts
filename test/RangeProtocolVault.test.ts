@@ -405,7 +405,8 @@ describe("RangeProtocolVault", () => {
       amount0ToAdd.mul(9900).div(10000),
       amount1ToAdd.mul(9900).div(10000),
     ]);
-    await vault.removeLiquidity();
+
+    await vault.removeLiquidity([0, 0]);
     const burnAmount = await vault.balanceOf(manager.address);
     const { amount0: amount0Out, amount1: amount1Out } =
       await vault.getUnderlyingBalancesByShare(burnAmount);
@@ -466,7 +467,7 @@ describe("RangeProtocolVault", () => {
 
     it("should not remove liquidity by non-manager", async () => {
       await expect(
-        vault.connect(nonManager).removeLiquidity()
+        vault.connect(nonManager).removeLiquidity([0, 0])
       ).to.be.revertedWith("Ownable: caller is not the manager");
     });
 
@@ -479,7 +480,7 @@ describe("RangeProtocolVault", () => {
       expect(liquidityBefore).not.to.be.equal(0);
 
       const { fee0, fee1 } = await vault.getCurrentFees();
-      await expect(vault.removeLiquidity())
+      await expect(vault.removeLiquidity([0, 0]))
         .to.emit(vault, "InThePositionStatusSet")
         .withArgs(false)
         .to.emit(vault, "FeesEarned")
@@ -499,7 +500,7 @@ describe("RangeProtocolVault", () => {
       );
 
       expect(liquidity).to.be.equal(0);
-      await expect(vault.removeLiquidity())
+      await expect(vault.removeLiquidity([0, 0]))
         .to.be.emit(vault, "InThePositionStatusSet")
         .withArgs(false)
         .not.to.emit(vault, "FeesEarned");
@@ -560,7 +561,7 @@ describe("RangeProtocolVault", () => {
         amount0ToAdd.mul(9900).div(10000),
         amount1ToAdd.mul(9900).div(10000),
       ]);
-      await vault.removeLiquidity();
+      await vault.removeLiquidity([0, 0]);
     });
 
     it("should not add liquidity by non-manager", async () => {
@@ -619,7 +620,7 @@ describe("RangeProtocolVault", () => {
         await token0.balanceOf(vault.address),
         await token1.balanceOf(vault.address)
       );
-      let { amount0: amount0ToAdd, amount1: amount1ToAdd } =
+      const { amount0: amount0ToAdd, amount1: amount1ToAdd } =
         await mockLiquidityAmounts.getAmountsForLiquidity(
           sqrtPriceX96,
           sqrtPriceA,
@@ -627,13 +628,10 @@ describe("RangeProtocolVault", () => {
           liquidityToAdd
         );
       await expect(
-        vault.addLiquidity(
-          lowerTick,
-          upperTick,
-          amount0ToAdd,
-          amount1ToAdd,
-          [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)]
-        )
+        vault.addLiquidity(lowerTick, upperTick, amount0ToAdd, amount1ToAdd, [
+          amount0ToAdd.mul(9900).div(10000),
+          amount1ToAdd.mul(9900).div(10000),
+        ])
       )
         .to.emit(vault, "LiquidityAdded")
         .withArgs(liquidityToAdd, lowerTick, upperTick, anyValue, anyValue)
