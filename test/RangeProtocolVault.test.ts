@@ -196,8 +196,8 @@ describe("RangeProtocolVault", () => {
 
     await expect(
       vault.mint(mintAmount, [
-        _amount0.mul(9900).div(10000),
-        _amount1.mul(9900).div(10000),
+        _amount0,
+        _amount1,
       ])
     )
       .to.emit(vault, "Minted")
@@ -232,7 +232,7 @@ describe("RangeProtocolVault", () => {
     } = await vault.getMintAmounts(amount0, amount1);
 
     await expect(
-      vault.mint(mintAmount, [_amount0.mul(2), _amount1.mul(2)])
+      vault.mint(mintAmount, [_amount0.div(2), _amount1.div(2)])
     ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
   });
 
@@ -253,8 +253,8 @@ describe("RangeProtocolVault", () => {
     expect(await vault.totalSupply()).to.not.be.equal(0);
     await expect(
       vault.mint(mintAmount, [
-        _amount0.mul(9900).div(10000),
-        _amount1.mul(9900).div(10000),
+        _amount0,
+        _amount1,
       ])
     )
       .to.emit(vault, "Minted")
@@ -402,8 +402,8 @@ describe("RangeProtocolVault", () => {
       mintAmount,
     } = await vault.getMintAmounts(amount0, amount1);
     await vault.mint(mintAmount, [
-      amount0ToAdd.mul(9900).div(10000),
-      amount1ToAdd.mul(9900).div(10000),
+      amount0ToAdd,
+      amount1ToAdd,
     ]);
 
     await vault.removeLiquidity([0, 0]);
@@ -460,8 +460,8 @@ describe("RangeProtocolVault", () => {
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
       await vault.mint(mintAmount, [
-        amount0ToAdd.mul(9900).div(10000),
-        amount1ToAdd.mul(9900).div(10000),
+        amount0ToAdd,
+        amount1ToAdd,
       ]);
     });
 
@@ -558,8 +558,8 @@ describe("RangeProtocolVault", () => {
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
       await vault.mint(mintAmount, [
-        amount0ToAdd.mul(9900).div(10000),
-        amount1ToAdd.mul(9900).div(10000),
+        amount0ToAdd,
+        amount1ToAdd,
       ]);
       await vault.removeLiquidity([0, 0]);
     });

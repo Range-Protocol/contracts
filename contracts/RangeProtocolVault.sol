@@ -165,13 +165,13 @@ contract RangeProtocolVault is
      * @notice mint mints range vault shares, fractional shares of a Uniswap V3 position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
-     * @param minAmounts desired amounts to add in token0 and token1.
+     * @param maxAmounts max amounts to add in token0 and token1.
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
         uint256 mintAmount,
-        uint256[2] calldata minAmounts
+        uint256[2] calldata maxAmounts
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
@@ -202,7 +202,7 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
-        if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+        if (amount0 > maxAmounts[0] || amount1 > maxAmounts[1])
             revert VaultErrors.SlippageExceedThreshold();
 
         if (!userVaults[msg.sender].exists) {

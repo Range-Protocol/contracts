@@ -44,7 +44,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
 
     function mint(
         uint256 mintAmount,
-        uint256[2] calldata minAmounts
+        uint256[2] calldata maxAmounts
     ) external returns (uint256 amount0, uint256 amount1);
 
     function burn(

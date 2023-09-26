@@ -161,7 +161,12 @@ describe("RangeProtocolVault::exposure", () => {
       amount1: amount1Mint1,
     } = await vault.getMintAmounts(amount0, amount1);
 
-    await expect(vault.mint(mintAmount1, [amount0Mint1.mul(9900).div(10000), amount1Mint1.mul(9900).div(10000)]))
+    await expect(
+      vault.mint(mintAmount1, [
+        amount0Mint1.mul(10100).div(10000),
+        amount1Mint1.mul(10100).div(10000),
+      ])
+    )
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount1, amount0Mint1, amount1Mint1);
 
@@ -184,7 +189,10 @@ describe("RangeProtocolVault::exposure", () => {
 
     await vault
       .connect(newManager)
-      .mint(mintAmount2, [amount0Mint2.mul(9900).div(10000), amount1Mint2.mul(9900).div(10000)]);
+      .mint(mintAmount2, [
+        amount0Mint2.mul(10100).div(10000),
+        amount1Mint2.mul(10100).div(10000),
+      ]);
     console.log("Users 2:");
     console.log("mint amount: ", mintAmount1.toString());
     console.log("token0 amount: ", amount0Mint2.toString());
@@ -241,7 +249,10 @@ describe("RangeProtocolVault::exposure", () => {
 
     await vault
       .connect(newManager)
-      .mint(mintAmount3, [amount0Mint3.mul(9900).div(10000), amount1Mint3.mul(9900).div(10000)]);
+      .mint(mintAmount3, [
+        amount0Mint3,
+        amount1Mint3
+      ]);
     console.log(
       "vault shares after: ",
       (await vault.balanceOf(newManager.address)).toString()
