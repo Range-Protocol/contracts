@@ -66,7 +66,7 @@ interface IRangeProtocolVault is IUniswapV3MintCallback, IUniswapV3SwapCallback 
         int24 newUpperTick,
         uint256 amount0,
         uint256 amount1,
-        uint256[2] calldata minAmounts
+        uint256[2] calldata maxAmounts
     ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);
 
     function collectManager() external;

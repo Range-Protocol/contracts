@@ -575,7 +575,7 @@ describe("RangeProtocolVault", () => {
       ).to.be.revertedWith("Ownable: caller is not the manager");
     });
 
-    it("should not add liquidity when min amounts are not satisfied", async () => {
+    it("should not add liquidity when max amounts are not satisfied", async () => {
       const { amount0Current, amount1Current } =
         await vault.getUnderlyingBalances();
 
@@ -585,7 +585,7 @@ describe("RangeProtocolVault", () => {
           upperTick,
           amount0Current,
           amount1Current,
-          [amount0Current, amount1Current.mul(2)]
+          [amount0Current, amount1Current.div(2)]
         )
       ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
     });
@@ -629,8 +629,8 @@ describe("RangeProtocolVault", () => {
         );
       await expect(
         vault.addLiquidity(lowerTick, upperTick, amount0ToAdd, amount1ToAdd, [
-          amount0ToAdd.mul(9900).div(10000),
-          amount1ToAdd.mul(9900).div(10000),
+          amount0ToAdd.mul(10100).div(10000),
+          amount1ToAdd.mul(10100).div(10000),
         ])
       )
         .to.emit(vault, "LiquidityAdded")
@@ -649,8 +649,8 @@ describe("RangeProtocolVault", () => {
         amount0Current,
         amount1Current,
         [
-          amount0Current.mul(9900).div(10000),
-          amount1Current.mul(9900).div(10000),
+          amount0Current.mul(10100).div(10000),
+          amount1Current.mul(10100).div(10000),
         ]
       );
       await expect(

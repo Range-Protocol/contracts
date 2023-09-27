@@ -373,14 +373,14 @@ contract RangeProtocolVault is
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
-     * @param minAmounts max amounts to add for slippage protection
+     * @param maxAmounts max amounts to add for slippage protection
      */
     function addLiquidity(
         int24 newLowerTick,
         int24 newUpperTick,
         uint256 amount0,
         uint256 amount1,
-        uint256[2] calldata minAmounts
+        uint256[2] calldata maxAmounts
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
         if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
 
@@ -401,7 +401,7 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
-            if (amountDeposited0 < minAmounts[0] || amountDeposited1 < minAmounts[1])
+            if (amountDeposited0 > maxAmounts[0] || amountDeposited1 > maxAmounts[1])
                 revert VaultErrors.SlippageExceedThreshold();
 
             _updateTicks(newLowerTick, newUpperTick);
