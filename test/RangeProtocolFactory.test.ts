@@ -113,6 +113,23 @@ describe("RangeProtocolFactory", () => {
     ).to.be.revertedWith("ZeroPoolAddress()");
   });
 
+  it("should not deploy vault with zero manager address", async function () {
+    await expect(
+      factory.createVault(
+        token0.address,
+        token1.address,
+        poolFee,
+        vaultImpl.address,
+        getInitializeData({
+          managerAddress: ZERO_ADDRESS,
+          name,
+          symbol,
+          WETH9: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+        })
+      )
+    ).to.be.revertedWith("ZeroManagerAddress()");
+  });
+
   it("non-owner should not be able to deploy vault", async function () {
     await expect(
       factory
@@ -161,7 +178,7 @@ describe("RangeProtocolFactory", () => {
 
     expect(await factory.vaultCount()).to.be.equal(2);
     const vault0Address = (await factory.getVaultAddresses(0, 0))[0];
-    const vault1Address = (await factory.getVaultAddresses(0, 1))[1];
+    const vault1Address = (await factory.getVaultAddresses(1, 1))[0];
 
     expect(vault0Address).to.not.be.equal(ethers.constants.AddressZero);
     expect(vault1Address).to.not.be.equal(ethers.constants.AddressZero);

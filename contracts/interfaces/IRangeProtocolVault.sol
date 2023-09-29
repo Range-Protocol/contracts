@@ -44,27 +44,31 @@ interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback 
 
     function mint(
         uint256 mintAmount,
-        bool depositNative
+        bool depositNative,
+        uint256[2] calldata maxAmounts
     ) external payable returns (uint256 amount0, uint256 amount1);
 
     function burn(
         uint256 burnAmount,
-        bool withdrawNative
+        bool withdrawNative,
+        uint256[2] calldata minAmounts
     ) external returns (uint256 amount0, uint256 amount1);
 
-    function removeLiquidity() external;
+    function removeLiquidity(uint256[2] calldata minAmounts) external;
 
     function swap(
         bool zeroForOne,
         int256 swapAmount,
-        uint160 sqrtPriceLimitX96
+        uint160 sqrtPriceLimitX96,
+        uint256 minAmountIn
     ) external returns (int256 amount0, int256 amount1);
 
     function addLiquidity(
         int24 newLowerTick,
         int24 newUpperTick,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256[2] calldata maxAmounts
     ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);
 
     function collectManager() external;
@@ -80,10 +84,6 @@ interface IRangeProtocolVault is IPancakeV3MintCallback, IPancakeV3SwapCallback 
         external
         view
         returns (uint256 amount0Current, uint256 amount1Current);
-
-    function getUnderlyingBalancesAtPrice(
-        uint160 sqrtRatioX96
-    ) external view returns (uint256 amount0Current, uint256 amount1Current);
 
     function getCurrentFees() external view returns (uint256 fee0, uint256 fee1);
 

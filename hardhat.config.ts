@@ -9,7 +9,7 @@ import "@typechain/hardhat";
 import "solidity-coverage";
 import "@nomicfoundation/hardhat-chai-matchers";
 import "hardhat-gas-reporter";
-// require("hardhat-contract-sizer");
+require("hardhat-contract-sizer");
 
 // Process Env Variables
 import * as dotenv from "dotenv";

@@ -82,6 +82,8 @@ contract RangeProtocolVault is
             (address, string, string, address)
         );
 
+        // reverts if manager address provided is zero.
+        if (manager == address(0x0)) revert VaultErrors.ZeroManagerAddress();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Ownable_init();
@@ -98,10 +100,8 @@ contract RangeProtocolVault is
 
         WETH9 = _WETH9;
 
-        performanceFee = 250;
-        managingFee = 0;
-        // Managing fee is 0% at the time vault initialization.
-        emit FeesUpdated(0, performanceFee);
+        // Managing fee is 0% and performanceFee is 2.5% at the time vault initialization.
+        _updateFees(0, 250);
     }
 
     /**
@@ -172,12 +172,14 @@ contract RangeProtocolVault is
      * @notice mint mints range vault shares, fractional shares of a Pancake V3 position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
+     * @param maxAmounts max amounts to add in token0 and token1.
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
         uint256 mintAmount,
-        bool depositNative
+        bool depositNative,
+        uint256[2] calldata maxAmounts
     )
         external
         payable
@@ -215,6 +217,9 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
+        if (amount0 > maxAmounts[0] || amount1 > maxAmounts[1])
+            revert VaultErrors.SlippageExceedThreshold();
+
         NativeTokenSupport.processDeposit(
             userVaults[msg.sender],
             users,
@@ -250,10 +255,15 @@ contract RangeProtocolVault is
      */
     function burn(
         uint256 burnAmount,
-        bool withdrawNative
+        bool withdrawNative,
+        uint256[2] calldata minAmounts
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
         (amount0, amount1) = getRawWithdrawAmounts(burnAmount);
+
+        if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+            revert VaultErrors.SlippageExceedThreshold();
+
         uint256 balanceBefore = balanceOf(msg.sender);
         _burn(msg.sender, burnAmount);
 
@@ -306,13 +316,16 @@ contract RangeProtocolVault is
      * @notice removeLiquidity removes liquidity from pancake pool and receives underlying tokens
      * in the vault contract.
      */
-    function removeLiquidity() external override onlyManager {
+    function removeLiquidity(uint256[2] calldata minAmounts) external override onlyManager {
         (uint128 liquidity, , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
             int24 _lowerTick = lowerTick;
             int24 _upperTick = upperTick;
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
+
+            if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+                revert VaultErrors.SlippageExceedThreshold();
 
             emit LiquidityRemoved(liquidity, _lowerTick, _upperTick, amount0, amount1);
 
@@ -338,6 +351,7 @@ contract RangeProtocolVault is
      * @param sqrtPriceLimitX96 threshold price ratio after the swap.
      * If zero for one, the price cannot be lower (swap make price lower) than this threshold value after the swap
      * If one for zero, the price cannot be greater (swap make price higher) than this threshold value after the swap
+     * @param minAmountIn minimum amount to protect against slippage.
      * @return amount0 If positive represents exact input token0 amount after this swap, msg.sender paid amount,
      * or exact output token0 amount (negative), msg.sender received amount
      * @return amount1 If positive represents exact input token1 amount after this swap, msg.sender paid amount,
@@ -346,7 +360,8 @@ contract RangeProtocolVault is
     function swap(
         bool zeroForOne,
         int256 swapAmount,
-        uint160 sqrtPriceLimitX96
+        uint160 sqrtPriceLimitX96,
+        uint256 minAmountIn
     ) external override onlyManager returns (int256 amount0, int256 amount1) {
         (amount0, amount1) = pool.swap(
             address(this),
@@ -355,6 +370,10 @@ contract RangeProtocolVault is
             sqrtPriceLimitX96,
             ""
         );
+        if (
+            (zeroForOne && uint256(-amount1) < minAmountIn) ||
+            (!zeroForOne && uint256(-amount0) < minAmountIn)
+        ) revert VaultErrors.SlippageExceedThreshold();
 
         emit Swapped(zeroForOne, amount0, amount1);
     }
@@ -366,16 +385,15 @@ contract RangeProtocolVault is
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
-     * @return remainingAmount0 remaining amount from amount0
-     * @return remainingAmount1 remaining amount from amount1
+     * @param maxAmounts max amounts to add for slippage protection
      */
     function addLiquidity(
         int24 newLowerTick,
         int24 newUpperTick,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256[2] calldata maxAmounts
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        _validateTicks(newLowerTick, newUpperTick);
         if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -395,7 +413,10 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
+            if (amountDeposited0 > maxAmounts[0] || amountDeposited1 > maxAmounts[1])
+                revert VaultErrors.SlippageExceedThreshold();
 
+            _updateTicks(newLowerTick, newUpperTick);
             emit LiquidityAdded(
                 baseLiquidity,
                 newLowerTick,
@@ -407,12 +428,6 @@ contract RangeProtocolVault is
             // Should return remaining token number for swap
             remainingAmount0 = amount0 - amountDeposited0;
             remainingAmount1 = amount1 - amountDeposited1;
-            lowerTick = newLowerTick;
-            upperTick = newUpperTick;
-            emit TicksSet(newLowerTick, newUpperTick);
-
-            inThePosition = true;
-            emit InThePositionStatusSet(true);
         }
     }
 
@@ -421,10 +436,7 @@ contract RangeProtocolVault is
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
-        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
-        _applyPerformanceFee(fee0, fee1);
-        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        emit FeesEarned(fee0, fee1);
+        _pullFeeFromPool();
     }
 
     /// @notice collectManager collects manager fees accrued
@@ -449,12 +461,7 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
-
-        managingFee = newManagingFee;
-        performanceFee = newPerformanceFee;
-        emit FeesUpdated(newManagingFee, newPerformanceFee);
+        _updateFees(newManagingFee, newPerformanceFee);
     }
 
     /**
@@ -473,7 +480,7 @@ contract RangeProtocolVault is
         uint256 totalSupply = totalSupply();
         if (totalSupply > 0) {
             (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
-        } else {
+        } else if (inThePosition) {
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
             uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
@@ -490,21 +497,6 @@ contract RangeProtocolVault is
                 newLiquidity
             );
         }
-    }
-
-    /**
-     * @notice compute total underlying token0 and token1 token supply at provided price
-     * includes current liquidity invested in pancake position, current fees earned
-     * and any uninvested leftover (but does not include manager fees accrued)
-     * @param sqrtRatioX96 price to computer underlying balances at
-     * @return amount0Current current total underlying balance of token0
-     * @return amount1Current current total underlying balance of token1
-     */
-    function getUnderlyingBalancesAtPrice(
-        uint160 sqrtRatioX96
-    ) external view override returns (uint256 amount0Current, uint256 amount1Current) {
-        (, int24 tick, , , , , ) = pool.slot0();
-        return _getUnderlyingBalances(sqrtRatioX96, tick);
     }
 
     /**
@@ -864,5 +856,31 @@ contract RangeProtocolVault is
             _lowerTick % tickSpacing != 0 ||
             _upperTick % tickSpacing != 0
         ) revert VaultErrors.InvalidTicksSpacing();
+    }
+
+    /**
+     * @notice internal function that pulls fee from the pool
+     */
+    function _pullFeeFromPool() private {
+        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
+        _applyPerformanceFee(fee0, fee1);
+        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
+        emit FeesEarned(fee0, fee1);
+    }
+
+    /**
+     * @notice internal function that updates the fee percentages for both performance
+     * and managing fee.
+     * @param newManagingFee new managing fee to set.
+     * @param newPerformanceFee new performance fee to set.
+     */
+    function _updateFees(uint16 newManagingFee, uint16 newPerformanceFee) private {
+        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
+        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
+
+        if (inThePosition) _pullFeeFromPool();
+        managingFee = newManagingFee;
+        performanceFee = newPerformanceFee;
+        emit FeesUpdated(newManagingFee, newPerformanceFee);
     }
 }
