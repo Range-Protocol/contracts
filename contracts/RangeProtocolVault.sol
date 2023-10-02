@@ -51,8 +51,8 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from pancake v3 pool.
-    uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
+    /// Performance fee cannot be set more than 20% of the fee earned from pancake v3 pool.
+    uint16 public constant MAX_PERFORMANCE_FEE_BPS = 2000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
     uint16 public constant MAX_MANAGING_FEE_BPS = 100;
 
@@ -100,8 +100,8 @@ contract RangeProtocolVault is
 
         WETH9 = _WETH9;
 
-        // Managing fee is 0% and performanceFee is 2.5% at the time vault initialization.
-        _updateFees(0, 250);
+        // Managing fee is 0% and performanceFee is 10% at the time vault initialization.
+        _updateFees(0, 1000);
     }
 
     /**
