@@ -5,7 +5,6 @@ async function main() {
     const provider = ethers.getDefaultProvider(""); // To be updated.
     const ledger = await new LedgerSigner(provider, ""); // To be updated.
 
-    const NATIVE_TOKEN_SUPPORT = ""; // to be updated.
     const NativeTokenSupport = await ethers.getContractFactory("NativeTokenSupport");
     const nativeTokenSupport = await NativeTokenSupport.deploy();
     console.log("Native Token Support: ", nativeTokenSupport.address);
