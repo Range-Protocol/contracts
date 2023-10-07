@@ -106,6 +106,12 @@ describe("RangeProtocolVault", () => {
     await token1.approve(vault.address, amount1.mul(bn(2)));
   });
 
+  it("should not reinitialize the vault", async () => {
+    await expect(
+      vault.initialize(uniV3Factory.address, 1, "0x")
+    ).to.be.revertedWith("Initializable: contract is already initialized");
+  });
+
   it("should not mint when vault is not initialized", async () => {
     await expect(
       vault.mint(1111, [amount0, amount1])
@@ -194,12 +200,7 @@ describe("RangeProtocolVault", () => {
     expect(await token0.balanceOf(univ3Pool.address)).to.be.equal(0);
     expect(await token1.balanceOf(univ3Pool.address)).to.be.equal(0);
 
-    await expect(
-      vault.mint(mintAmount, [
-        _amount0,
-        _amount1,
-      ])
-    )
+    await expect(vault.mint(mintAmount, [_amount0, _amount1]))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -251,12 +252,7 @@ describe("RangeProtocolVault", () => {
     const userVault1Before = (await vault.userVaults(manager.address)).token1;
 
     expect(await vault.totalSupply()).to.not.be.equal(0);
-    await expect(
-      vault.mint(mintAmount, [
-        _amount0,
-        _amount1,
-      ])
-    )
+    await expect(vault.mint(mintAmount, [_amount0, _amount1]))
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount, _amount0, _amount1);
 
@@ -401,10 +397,7 @@ describe("RangeProtocolVault", () => {
       amount1: amount1ToAdd,
       mintAmount,
     } = await vault.getMintAmounts(amount0, amount1);
-    await vault.mint(mintAmount, [
-      amount0ToAdd,
-      amount1ToAdd,
-    ]);
+    await vault.mint(mintAmount, [amount0ToAdd, amount1ToAdd]);
 
     await vault.removeLiquidity([0, 0]);
     const burnAmount = await vault.balanceOf(manager.address);
@@ -459,10 +452,7 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount, [
-        amount0ToAdd,
-        amount1ToAdd,
-      ]);
+      await vault.mint(mintAmount, [amount0ToAdd, amount1ToAdd]);
     });
 
     it("should not remove liquidity by non-manager", async () => {
@@ -557,10 +547,7 @@ describe("RangeProtocolVault", () => {
         amount1: amount1ToAdd,
         mintAmount,
       } = await vault.getMintAmounts(amount0, amount1);
-      await vault.mint(mintAmount, [
-        amount0ToAdd,
-        amount1ToAdd,
-      ]);
+      await vault.mint(mintAmount, [amount0ToAdd, amount1ToAdd]);
       await vault.removeLiquidity([0, 0]);
     });
 

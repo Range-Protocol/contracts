@@ -374,6 +374,8 @@ contract RangeProtocolVault is
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
      * @param maxAmounts max amounts to add for slippage protection
+     * @return remainingAmount0 remaining amount from amount0
+     * @return remainingAmount1 remaining amount from amount1
      */
     function addLiquidity(
         int24 newLowerTick,
