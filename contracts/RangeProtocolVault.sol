@@ -50,8 +50,8 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from uniswap v3 pool.
-    uint16 private constant MAX_PERFORMANCE_FEE_BPS = 1000;
+    /// Performance fee cannot be set more than 20% of the fee earned from uniswap v3 pool.
+    uint16 private constant MAX_PERFORMANCE_FEE_BPS = 2000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
     uint16 private constant MAX_MANAGING_FEE_BPS = 100;
 
@@ -93,13 +93,13 @@ contract RangeProtocolVault is
         tickSpacing = _tickSpacing;
         factory = msg.sender;
 
-        // Managing fee is 0% and performanceFee is 2.5% at the time vault initialization.
-        _updateFees(0, 250);
+        // Managing fee is 0% and performanceFee is 10% at the time vault initialization.
+        _updateFees(0, 1000);
     }
 
     /**
      * @notice updateTicks it is called by the contract manager to update the ticks.
-     * It can only be called once total supply is less than MINIMUM_SHARES and the vault has not active position
+     * It can only be called once total supply is zero and the vault has not active position
      * in the uniswap pool
      * @param _lowerTick lowerTick to set
      * @param _upperTick upperTick to set

@@ -249,10 +249,7 @@ describe("RangeProtocolVault::exposure", () => {
 
     await vault
       .connect(newManager)
-      .mint(mintAmount3, [
-        amount0Mint3,
-        amount1Mint3
-      ]);
+      .mint(mintAmount3, [amount0Mint3, amount1Mint3]);
     console.log(
       "vault shares after: ",
       (await vault.balanceOf(newManager.address)).toString()
@@ -408,7 +405,10 @@ describe("RangeProtocolVault::exposure", () => {
     const user1Amount = await vault.balanceOf(manager.address);
     let { amount0: amount0Out, amount1: amount1Out } =
       await vault.getUnderlyingBalancesByShare(user1Amount);
-    await vault.burn(user1Amount, [amount0Out, amount1Out]);
+    await vault.burn(user1Amount, [
+      amount0Out.mul(9999).div(10000),
+      amount1Out.mul(9999).div(10000),
+    ]);
 
     console.log("==================================================");
     console.log("Vault balance after user1 withdraws liquidity");
