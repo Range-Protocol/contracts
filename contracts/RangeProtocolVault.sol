@@ -257,7 +257,7 @@ contract RangeProtocolVault is
         uint256 burnAmount,
         bool withdrawNative,
         uint256[2] calldata minAmounts
-    ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
+    ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
         (amount0, amount1) = getRawWithdrawAmounts(burnAmount);
 
