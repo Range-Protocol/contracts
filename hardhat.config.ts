@@ -24,6 +24,10 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
+      forking: {
+        enabled: true,
+        url: "https://polygon.llamarpc.com",
+      },
       allowUnlimitedContractSize: true,
     },
     mainnet: {

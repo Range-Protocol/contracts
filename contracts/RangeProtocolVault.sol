@@ -236,7 +236,7 @@ contract RangeProtocolVault is
      */
     function burn(
         uint256 burnAmount
-    ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
+    ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
         uint256 totalSupply = totalSupply();
         uint256 balanceBefore = balanceOf(msg.sender);
