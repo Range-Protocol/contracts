@@ -600,10 +600,10 @@ describe("RangeProtocolVault::Native", () => {
         vault.burn(vaultShares, false, [minAmount0, minAmount1])
       ).not.to.emit(vault, "FeesEarned");
       expect(await token0.balanceOf(manager.address)).to.be.equal(
-        userBalance0Before.add(userBalance0)
+        userBalance0Before.add(userBalance0).sub(managingFee0)
       );
       expect(await token1.balanceOf(manager.address)).to.be.equal(
-        userBalance1Before.add(userBalance1)
+        userBalance1Before.add(userBalance1).sub(managingFee1)
       );
       expect(await vault.managerBalance0()).to.be.equal(
         managerBalance0Before.add(managingFee0)

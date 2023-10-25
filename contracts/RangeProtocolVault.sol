@@ -268,7 +268,7 @@ contract RangeProtocolVault is
         _burn(msg.sender, burnAmount);
 
         _applyManagingFee(amount0, amount1);
-        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
+        (amount0, amount1) = _netManagingFees(amount0, amount1);
         NativeTokenSupport.processWithdraw(
             userVaults[msg.sender],
             withdrawNative,
@@ -281,7 +281,7 @@ contract RangeProtocolVault is
             WETH9
         );
 
-        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
+        emit Burned(msg.sender, burnAmount, amount0, amount1);
     }
 
     function getRawWithdrawAmounts(

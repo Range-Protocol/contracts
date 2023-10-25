@@ -419,10 +419,10 @@ describe("RangeProtocolVault::Non-Native", () => {
     const amount1Got = amount1Current.mul(burnAmount).div(totalSupplyBefore);
 
     expect(await token0.balanceOf(manager.address)).to.be.equal(
-      userBalance0Before.add(amount0Got)
+      userBalance0Before.add(amount0Got).sub(managingFee0)
     );
     expect(await token1.balanceOf(manager.address)).to.be.equal(
-      userBalance1Before.add(amount1Got)
+      userBalance1Before.add(amount1Got).sub(managingFee1)
     );
     expect((await vault.userVaults(manager.address)).token0).to.be.equal(
       userVault0Before.mul(vaultShares.sub(burnAmount)).div(vaultShares)
@@ -582,10 +582,10 @@ describe("RangeProtocolVault::Non-Native", () => {
         "FeesEarned"
       );
       expect(await token0.balanceOf(manager.address)).to.be.equal(
-        userBalance0Before.add(userBalance0)
+        userBalance0Before.add(userBalance0).sub(managingFee0)
       );
       expect(await token1.balanceOf(manager.address)).to.be.equal(
-        userBalance1Before.add(userBalance1)
+        userBalance1Before.add(userBalance1).sub(managingFee1)
       );
       expect(await vault.managerBalance0()).to.be.equal(
         managerBalance0Before.add(managingFee0)
