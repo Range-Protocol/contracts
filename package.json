@@ -52,13 +52,15 @@
     "ts-generator": "0.1.1",
     "ts-node": "9.1.1",
     "typechain": "5.0.0",
-    "typescript": "4.2.4"
+    "typescript": "4.2.4",
+    "decimal.js": "^10.4.3"
   },
   "lint-staged": {
     "*.{ts,js}": "eslint -c .eslintrc.json"
   },
   "version": "0.0.0",
   "dependencies": {
+    "decimal.js": "^10.4.3",
     "@cryptoalgebra/core": "^2.0.0",
     "@cryptoalgebra/periphery": "^1.0.0"
   }

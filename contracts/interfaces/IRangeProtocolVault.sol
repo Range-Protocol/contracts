@@ -42,23 +42,31 @@ interface IRangeProtocolVault is IAlgebraMintCallback, IAlgebraSwapCallback {
 
     function updateTicks(int24 _bottomTick, int24 _topTick) external;
 
-    function mint(uint256 mintAmount) external returns (uint256 amount0, uint256 amount1);
+    function mint(
+        uint256 mintAmount,
+        uint256[2] calldata maxAmounts
+    ) external returns (uint256 amount0, uint256 amount1);
 
-    function burn(uint256 burnAmount) external returns (uint256 amount0, uint256 amount1);
+    function burn(
+        uint256 burnAmount,
+        uint256[2] calldata minAmounts
+    ) external returns (uint256 amount0, uint256 amount1);
 
-    function removeLiquidity() external;
+    function removeLiquidity(uint256[2] calldata minAmounts) external;
 
     function swap(
         bool zeroForOne,
         int256 swapAmount,
-        uint160 sqrtPriceLimitX96
+        uint160 sqrtPriceLimitX96,
+        uint256 minAmountIn
     ) external returns (int256 amount0, int256 amount1);
 
     function addLiquidity(
         int24 newBottomTick,
         int24 newTopTick,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256[2] calldata maxAmounts
     ) external returns (uint256 remainingAmount0, uint256 remainingAmount1);
 
     function collectManager() external;
@@ -74,10 +82,6 @@ interface IRangeProtocolVault is IAlgebraMintCallback, IAlgebraSwapCallback {
         external
         view
         returns (uint256 amount0Current, uint256 amount1Current);
-
-    function getUnderlyingBalancesAtPrice(
-        uint160 sqrtRatioX96
-    ) external view returns (uint256 amount0Current, uint256 amount1Current);
 
     function getCurrentFees() external view returns (uint256 fee0, uint256 fee1);
 

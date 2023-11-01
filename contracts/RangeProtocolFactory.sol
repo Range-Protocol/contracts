@@ -4,6 +4,7 @@ pragma solidity 0.8.4;
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IAlgebraFactory} from "./algebra/core/contracts/interfaces/IAlgebraFactory.sol";
 import {IRangeProtocolFactory} from "./interfaces/IRangeProtocolFactory.sol";
 import {FactoryErrors} from "./errors/FactoryErrors.sol";
@@ -88,7 +89,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
     ) external view returns (address[] memory vaultList) {
         vaultList = new address[](endIdx - startIdx + 1);
         for (uint256 i = startIdx; i <= endIdx; i++) {
-            vaultList[i] = _vaultsList[i];
+            vaultList[i - startIdx] = _vaultsList[i];
         }
     }
 
@@ -109,7 +110,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
         bytes memory data
     ) internal returns (address vault) {
         if (data.length == 0) revert FactoryErrors.NoVaultInitDataProvided();
-        if (tokenA == tokenB) revert();
+        if (tokenA == tokenB) revert FactoryErrors.SameTokensAddresses();
         address token0 = tokenA < tokenB ? tokenA : tokenB;
         if (token0 == address(0x0)) revert("token cannot be a zero address");
         vault = address(
@@ -125,6 +126,7 @@ contract RangeProtocolFactory is IRangeProtocolFactory, Ownable {
      * @dev Internal function to upgrade a vault's implementation.
      */
     function _upgradeVault(address _vault, address _impl) internal {
+        if (!Address.isContract(_impl)) revert FactoryErrors.ImplIsNotAContract();
         (bool success, ) = _vault.call(abi.encodeWithSelector(UPGRADE_SELECTOR, _impl));
 
         if (!success) revert FactoryErrors.VaultUpgradeFailed();

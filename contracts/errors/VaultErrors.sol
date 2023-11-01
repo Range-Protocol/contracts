@@ -11,10 +11,11 @@ library VaultErrors {
     error InvalidBurnAmount();
     error MintNotAllowed();
     error ZeroMintAmount();
-    error MintFailed();
     error ZeroUnderlyingBalance();
     error TicksOutOfRange();
     error InvalidTicksSpacing();
     error OnlyFactoryAllowed();
     error LiquidityAlreadyAdded();
+    error ZeroManagerAddress();
+    error SlippageExceedThreshold();
 }

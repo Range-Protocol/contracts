@@ -50,10 +50,10 @@ contract RangeProtocolVault is
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using TickMath for int24;
 
-    /// Performance fee cannot be set more than 10% of the fee earned from algebra pool.
-    uint16 public constant MAX_PERFORMANCE_FEE_BPS = 1000;
+    /// Performance fee cannot be set more than 20% of the fee earned from uniswap v3 pool.
+    uint16 private constant MAX_PERFORMANCE_FEE_BPS = 2000;
     /// Managing fee cannot be set more than 1% of the total fee earned.
-    uint16 public constant MAX_MANAGING_FEE_BPS = 100;
+    uint16 private constant MAX_MANAGING_FEE_BPS = 100;
 
     constructor() {
         _disableInitializers();
@@ -77,6 +77,8 @@ contract RangeProtocolVault is
             (address, string, string)
         );
 
+        // reverts if manager address provided is zero.
+        if (manager == address(0x0)) revert VaultErrors.ZeroManagerAddress();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __Ownable_init();
@@ -91,10 +93,8 @@ contract RangeProtocolVault is
         tickSpacing = _tickSpacing;
         factory = msg.sender;
 
-        performanceFee = 250;
-        managingFee = 0;
-        // Managing fee is 0% at the time vault initialization.
-        emit FeesUpdated(0, performanceFee);
+        // Managing fee is 0% and performanceFee is 10% at the time vault initialization.
+        _updateFees(0, 1000);
     }
 
     /**
@@ -165,11 +165,13 @@ contract RangeProtocolVault is
      * @notice mint mints range vault shares, fractional shares of a Algebra position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
+     * @param maxAmounts max amounts to add in token0 and token1.
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
-        uint256 mintAmount
+        uint256 mintAmount,
+        uint256[2] calldata maxAmounts
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
@@ -200,6 +202,9 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
+        if (amount0 > maxAmounts[0] || amount1 > maxAmounts[1])
+            revert VaultErrors.SlippageExceedThreshold();
+
         if (!userVaults[msg.sender].exists) {
             userVaults[msg.sender].exists = true;
             users.push(msg.sender);
@@ -228,23 +233,32 @@ contract RangeProtocolVault is
         emit Minted(msg.sender, mintAmount, amount0, amount1);
     }
 
+    struct BurnLocalVars {
+        uint256 totalSupply;
+        uint256 balanceBefore;
+    }
+
     /**
      * @notice burn burns range vault shares (shares of a Algebra position) and receive underlying
      * @param burnAmount The number of shares to burn
+     * @param minAmounts the min desired amounts to be out from burn.
      * @return amount0 amount of token0 transferred to msg.sender for burning {burnAmount}
      * @return amount1 amount of token1 transferred to msg.sender for burning {burnAmount}
      */
     function burn(
-        uint256 burnAmount
+        uint256 burnAmount,
+        uint256[2] calldata minAmounts
     ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
-        uint256 totalSupply = totalSupply();
-        uint256 balanceBefore = balanceOf(msg.sender);
+
+        BurnLocalVars memory vars;
+        vars.totalSupply = totalSupply();
+        vars.balanceBefore = balanceOf(msg.sender);
         _burn(msg.sender, burnAmount);
 
         if (inThePosition) {
             (uint128 liquidity, , , , , ) = pool.positions(getPositionID());
-            uint256 liquidityBurned_ = FullMath.mulDiv(burnAmount, liquidity, totalSupply);
+            uint256 liquidityBurned_ = FullMath.mulDiv(burnAmount, liquidity, vars.totalSupply);
             uint128 liquidityBurned = SafeCastUpgradeable.toUint128(liquidityBurned_);
             (uint256 burn0, uint256 burn1, uint256 fee0, uint256 fee1) = _withdraw(liquidityBurned);
 
@@ -257,43 +271,49 @@ contract RangeProtocolVault is
             if (passiveBalance0 > managerBalance0) passiveBalance0 -= managerBalance0;
             if (passiveBalance1 > managerBalance1) passiveBalance1 -= managerBalance1;
 
-            amount0 = burn0 + FullMath.mulDiv(passiveBalance0, burnAmount, totalSupply);
-            amount1 = burn1 + FullMath.mulDiv(passiveBalance1, burnAmount, totalSupply);
+            amount0 = burn0 + FullMath.mulDiv(passiveBalance0, burnAmount, vars.totalSupply);
+            amount1 = burn1 + FullMath.mulDiv(passiveBalance1, burnAmount, vars.totalSupply);
         } else {
             (uint256 amount0Current, uint256 amount1Current) = getUnderlyingBalances();
-            amount0 = FullMath.mulDiv(amount0Current, burnAmount, totalSupply);
-            amount1 = FullMath.mulDiv(amount1Current, burnAmount, totalSupply);
+            amount0 = FullMath.mulDiv(amount0Current, burnAmount, vars.totalSupply);
+            amount1 = FullMath.mulDiv(amount1Current, burnAmount, vars.totalSupply);
         }
 
+        if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+            revert VaultErrors.SlippageExceedThreshold();
+
         _applyManagingFee(amount0, amount1);
-        (uint256 amount0AfterFee, uint256 amount1AfterFee) = _netManagingFees(amount0, amount1);
+        (amount0, amount1) = _netManagingFees(amount0, amount1);
         if (amount0 > 0) {
             userVaults[msg.sender].token0 =
-                (userVaults[msg.sender].token0 * (balanceBefore - burnAmount)) /
-                balanceBefore;
-            token0.safeTransfer(msg.sender, amount0AfterFee);
+                (userVaults[msg.sender].token0 * (vars.balanceBefore - burnAmount)) /
+                vars.balanceBefore;
+            token0.safeTransfer(msg.sender, amount0);
         }
         if (amount1 > 0) {
             userVaults[msg.sender].token1 =
-                (userVaults[msg.sender].token1 * (balanceBefore - burnAmount)) /
-                balanceBefore;
-            token1.safeTransfer(msg.sender, amount1AfterFee);
+                (userVaults[msg.sender].token1 * (vars.balanceBefore - burnAmount)) /
+                vars.balanceBefore;
+            token1.safeTransfer(msg.sender, amount1);
         }
 
-        emit Burned(msg.sender, burnAmount, amount0AfterFee, amount1AfterFee);
+        emit Burned(msg.sender, burnAmount, amount0, amount1);
     }
 
     /**
      * @notice removeLiquidity removes liquidity from algebra pool and receives underlying tokens
      * in the vault contract.
      */
-    function removeLiquidity() external override onlyManager {
+    function removeLiquidity(uint256[2] calldata minAmounts) external override onlyManager {
         (uint128 liquidity, , , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
             int24 _bottomTick = bottomTick;
             int24 _topTick = topTick;
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
+
+            if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+                revert VaultErrors.SlippageExceedThreshold();
 
             emit LiquidityRemoved(liquidity, _bottomTick, _topTick, amount0, amount1);
 
@@ -319,6 +339,7 @@ contract RangeProtocolVault is
      * @param sqrtPriceLimitX96 threshold price ratio after the swap.
      * If zero for one, the price cannot be lower (swap make price lower) than this threshold value after the swap
      * If one for zero, the price cannot be greater (swap make price higher) than this threshold value after the swap
+     * @param minAmountIn minimum amount to protect against slippage.
      * @return amount0 If positive represents exact input token0 amount after this swap, msg.sender paid amount,
      * or exact output token0 amount (negative), msg.sender received amount
      * @return amount1 If positive represents exact input token1 amount after this swap, msg.sender paid amount,
@@ -327,7 +348,8 @@ contract RangeProtocolVault is
     function swap(
         bool zeroForOne,
         int256 swapAmount,
-        uint160 sqrtPriceLimitX96
+        uint160 sqrtPriceLimitX96,
+        uint256 minAmountIn
     ) external override onlyManager returns (int256 amount0, int256 amount1) {
         (amount0, amount1) = pool.swap(
             address(this),
@@ -336,6 +358,10 @@ contract RangeProtocolVault is
             sqrtPriceLimitX96,
             ""
         );
+        if (
+            (zeroForOne && uint256(-amount1) < minAmountIn) ||
+            (!zeroForOne && uint256(-amount0) < minAmountIn)
+        ) revert VaultErrors.SlippageExceedThreshold();
 
         emit Swapped(zeroForOne, amount0, amount1);
     }
@@ -354,9 +380,9 @@ contract RangeProtocolVault is
         int24 newBottomTick,
         int24 newTopTick,
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256[2] calldata maxAmounts
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
-        _validateTicks(newBottomTick, newTopTick);
         if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
@@ -377,7 +403,10 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
+            if (amountDeposited0 > maxAmounts[0] || amountDeposited1 > maxAmounts[1])
+                revert VaultErrors.SlippageExceedThreshold();
 
+            _updateTicks(newBottomTick, newTopTick);
             emit LiquidityAdded(
                 baseLiquidity,
                 newBottomTick,
@@ -389,12 +418,6 @@ contract RangeProtocolVault is
             // Should return remaining token number for swap
             remainingAmount0 = amount0 - amountDeposited0;
             remainingAmount1 = amount1 - amountDeposited1;
-            bottomTick = newBottomTick;
-            topTick = newTopTick;
-            emit TicksSet(newBottomTick, newTopTick);
-
-            inThePosition = true;
-            emit InThePositionStatusSet(true);
         }
     }
 
@@ -403,10 +426,7 @@ contract RangeProtocolVault is
      * last collection.
      */
     function pullFeeFromPool() external onlyManager {
-        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
-        _applyPerformanceFee(fee0, fee1);
-        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
-        emit FeesEarned(fee0, fee1);
+        _pullFeeFromPool();
     }
 
     /// @notice collectManager collects manager fees accrued
@@ -431,12 +451,7 @@ contract RangeProtocolVault is
         uint16 newManagingFee,
         uint16 newPerformanceFee
     ) external override onlyManager {
-        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
-        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
-
-        managingFee = newManagingFee;
-        performanceFee = newPerformanceFee;
-        emit FeesUpdated(newManagingFee, newPerformanceFee);
+        _updateFees(newManagingFee, newPerformanceFee);
     }
 
     /**
@@ -455,7 +470,7 @@ contract RangeProtocolVault is
         uint256 totalSupply = totalSupply();
         if (totalSupply > 0) {
             (amount0, amount1, mintAmount) = _calcMintAmounts(totalSupply, amount0Max, amount1Max);
-        } else {
+        } else if (inThePosition) {
             (uint160 sqrtRatioX96, , , , , , ) = pool.globalState();
             uint128 newLiquidity = LiquidityAmounts.getLiquidityForAmounts(
                 sqrtRatioX96,
@@ -472,21 +487,6 @@ contract RangeProtocolVault is
                 newLiquidity
             );
         }
-    }
-
-    /**
-     * @notice compute total underlying token0 and token1 token supply at provided price
-     * includes current liquidity invested in algebra position, current fees earned
-     * and any uninvested leftover (but does not include manager fees accrued)
-     * @param sqrtRatioX96 price to computer underlying balances at
-     * @return amount0Current current total underlying balance of token0
-     * @return amount1Current current total underlying balance of token1
-     */
-    function getUnderlyingBalancesAtPrice(
-        uint160 sqrtRatioX96
-    ) external view override returns (uint256 amount0Current, uint256 amount1Current) {
-        (, int24 tick, , , , , ) = pool.globalState();
-        return _getUnderlyingBalances(sqrtRatioX96, tick);
     }
 
     /**
@@ -856,5 +856,31 @@ contract RangeProtocolVault is
             _bottomTick % tickSpacing != 0 ||
             _topTick % tickSpacing != 0
         ) revert VaultErrors.InvalidTicksSpacing();
+    }
+
+    /**
+     * @notice internal function that pulls fee from the pool
+     */
+    function _pullFeeFromPool() private {
+        (, , uint256 fee0, uint256 fee1) = _withdraw(0);
+        _applyPerformanceFee(fee0, fee1);
+        (fee0, fee1) = _netPerformanceFees(fee0, fee1);
+        emit FeesEarned(fee0, fee1);
+    }
+
+    /**
+     * @notice internal function that updates the fee percentages for both performance
+     * and managing fee.
+     * @param newManagingFee new managing fee to set.
+     * @param newPerformanceFee new performance fee to set.
+     */
+    function _updateFees(uint16 newManagingFee, uint16 newPerformanceFee) private {
+        if (newManagingFee > MAX_MANAGING_FEE_BPS) revert VaultErrors.InvalidManagingFee();
+        if (newPerformanceFee > MAX_PERFORMANCE_FEE_BPS) revert VaultErrors.InvalidPerformanceFee();
+
+        if (inThePosition) _pullFeeFromPool();
+        managingFee = newManagingFee;
+        performanceFee = newPerformanceFee;
+        emit FeesUpdated(newManagingFee, newPerformanceFee);
     }
 }

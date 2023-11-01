@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
+import { Decimal } from "decimal.js";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {
   IERC20,
@@ -156,7 +157,12 @@ describe("RangeProtocolVault::exposure", () => {
       amount1: amount1Mint1,
     } = await vault.getMintAmounts(amount0, amount1);
 
-    await expect(vault.mint(mintAmount1))
+    await expect(
+      vault.mint(mintAmount1, [
+        amount0Mint1.mul(10100).div(10000),
+        amount1Mint1.mul(10100).div(10000),
+      ])
+    )
       .to.emit(vault, "Minted")
       .withArgs(manager.address, mintAmount1, amount0Mint1, amount1Mint1);
 
@@ -177,8 +183,12 @@ describe("RangeProtocolVault::exposure", () => {
     await token0.connect(newManager).approve(vault.address, amount0Mint2);
     await token1.connect(newManager).approve(vault.address, amount1Mint2);
 
-    await vault.connect(newManager).mint(mintAmount2);
-
+    await vault
+      .connect(newManager)
+      .mint(mintAmount2, [
+        amount0Mint2.mul(10100).div(10000),
+        amount1Mint2.mul(10100).div(10000),
+      ]);
     console.log("Users 2:");
     console.log("mint amount: ", mintAmount1.toString());
     console.log("token0 amount: ", amount0Mint2.toString());
@@ -233,7 +243,9 @@ describe("RangeProtocolVault::exposure", () => {
       (await vault.balanceOf(newManager.address)).toString()
     );
 
-    await vault.connect(newManager).mint(mintAmount3);
+    await vault
+      .connect(newManager)
+      .mint(mintAmount3, [amount0Mint3, amount1Mint3]);
     console.log(
       "vault shares after: ",
       (await vault.balanceOf(newManager.address)).toString()
@@ -250,7 +262,7 @@ describe("RangeProtocolVault::exposure", () => {
     console.log("==================================================");
 
     console.log("Remove liquidity from algebra pool");
-    await vault.removeLiquidity();
+    await vault.removeLiquidity([0, 0]);
     console.log("==================================================");
 
     console.log("Total users vault amounts based on their initial deposits");
@@ -289,7 +301,7 @@ describe("RangeProtocolVault::exposure", () => {
     );
     const mockSqrtPriceMath = await MockSqrtPriceMath.deploy();
 
-    const { price } = await algebraPool.globalState();
+    let { price } = await algebraPool.globalState();
     const liquidity = await algebraPool.liquidity();
 
     const nextPrice = currentAmountBaseToken.gt(initialAmountBaseToken)
@@ -308,10 +320,21 @@ describe("RangeProtocolVault::exposure", () => {
           false
         );
 
+    const ONE = bn(2).pow(bn(96));
+    let minAmountIn = ONE.mul(ONE)
+      .div(nextPrice)
+      .sub(ONE.mul(ONE).div(price))
+      .mul(liquidity)
+      .div(ONE);
+    minAmountIn = minAmountIn.mul(bn(9_900)).div(bn(10_000));
+    const minAmountInSigned = currentAmountBaseToken.gt(initialAmountBaseToken)
+      ? minAmountIn.toString()
+      : (-minAmountIn).toString();
     await vault.swap(
       currentAmountBaseToken.gt(initialAmountBaseToken),
       currentAmountBaseToken.sub(initialAmountBaseToken),
-      nextPrice
+      nextPrice,
+      minAmountInSigned
     );
     console.log("==================================================");
     console.log("Vault balance after swap to maintain users' vault exposure: ");
@@ -322,12 +345,46 @@ describe("RangeProtocolVault::exposure", () => {
     console.log("token1 amount: ", amount1Current4.toString());
     console.log("==================================================");
 
-    console.log("Add liquidity back to the algebra v3 pool");
+    const MockLiquidityAmounts = await ethers.getContractFactory(
+      "MockLiquidityAmounts"
+    );
+    const mockLiquidityAmounts = await MockLiquidityAmounts.deploy();
+
+    ({ price } = await algebraPool.globalState());
+    const sqrtPriceA = new Decimal(1.0001)
+      .pow(bottomTick)
+      .sqrt()
+      .mul(new Decimal(2).pow(96))
+      .round()
+      .toFixed();
+    const sqrtPriceB = new Decimal(1.0001)
+      .pow(topTick)
+      .sqrt()
+      .mul(new Decimal(2).pow(96))
+      .round()
+      .toFixed();
+    const liquidityToAdd = await mockLiquidityAmounts.getLiquidityForAmounts(
+      price,
+      sqrtPriceA,
+      sqrtPriceB,
+      await token0.balanceOf(vault.address),
+      await token1.balanceOf(vault.address)
+    );
+    const { amount0: amount0ToAdd, amount1: amount1ToAdd } =
+      await mockLiquidityAmounts.getAmountsForLiquidity(
+        price,
+        sqrtPriceA,
+        sqrtPriceB,
+        liquidityToAdd
+      );
+
+    console.log("Add liquidity back to the uniswap v3 pool");
     await vault.addLiquidity(
       bottomTick,
       topTick,
-      amount0Current4,
-      amount1Current4
+      amount0ToAdd.sub(await vault.managerBalance0()),
+      amount1ToAdd.sub(await vault.managerBalance1()),
+      [amount0ToAdd.mul(10100).div(10000), amount1ToAdd.mul(10100).div(10000)]
     );
 
     console.log("==================================================");
@@ -342,7 +399,12 @@ describe("RangeProtocolVault::exposure", () => {
 
     console.log("user 1 withdraws liquidity");
     const user1Amount = await vault.balanceOf(manager.address);
-    await vault.burn(user1Amount);
+    let { amount0: amount0Out, amount1: amount1Out } =
+      await vault.getUnderlyingBalancesByShare(user1Amount);
+    await vault.burn(user1Amount, [
+      amount0Out.mul(9999).div(10000),
+      amount1Out.mul(9999).div(10000),
+    ]);
 
     console.log("==================================================");
     console.log("Vault balance after user1 withdraws liquidity");
@@ -354,14 +416,20 @@ describe("RangeProtocolVault::exposure", () => {
 
     console.log("user 2 withdraws liquidity");
     const user2Amount = await vault.balanceOf(newManager.address);
-    await vault.connect(newManager).burn(user2Amount);
+    ({ amount0: amount0Out, amount1: amount1Out } =
+      await vault.getUnderlyingBalancesByShare(user1Amount));
+    await vault.connect(newManager).burn(user2Amount, [amount0Out, amount1Out]);
 
     console.log("==================================================");
     console.log("Vault balance after user2 withdraws liquidity");
+    await vault.collectManager();
     const { amount0Current: amount0Current7, amount1Current: amount1Current7 } =
       await vault.getUnderlyingBalances();
     console.log("token0 amount: ", amount0Current7.toString());
     console.log("token1 amount: ", amount1Current7.toString());
     console.log("==================================================");
+    console.log((await token0.balanceOf(vault.address)).toString());
+    console.log((await token1.balanceOf(vault.address)).toString());
+    console.log((await vault.totalSupply()).toString());
   });
 });
