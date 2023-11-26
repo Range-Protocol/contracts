@@ -70,8 +70,8 @@ library NativeTokenSupport {
             address(token1) == WETH9
         );
         uint256 weth9Amount = 0;
+        userVault.token0 = (userVault.token0 * (balanceBefore - burnAmount)) / balanceBefore;
         if (amount0 != 0) {
-            userVault.token0 = (userVault.token0 * (balanceBefore - burnAmount)) / balanceBefore;
             if (isToken0Native && withdrawNative) {
                 IWETH9(WETH9).withdraw(amount0);
                 weth9Amount = amount0;
@@ -79,8 +79,9 @@ library NativeTokenSupport {
                 token0.safeTransfer(msg.sender, amount0);
             }
         }
+
+        userVault.token1 = (userVault.token1 * (balanceBefore - burnAmount)) / balanceBefore;
         if (amount1 != 0) {
-            userVault.token1 = (userVault.token1 * (balanceBefore - burnAmount)) / balanceBefore;
             if (isToken1Native && withdrawNative) {
                 IWETH9(WETH9).withdraw(amount1);
                 weth9Amount = amount1;
