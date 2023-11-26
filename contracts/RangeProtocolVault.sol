@@ -284,18 +284,16 @@ contract RangeProtocolVault is
 
         _applyManagingFee(amount0, amount1);
         (amount0, amount1) = _netManagingFees(amount0, amount1);
-        if (amount0 > 0) {
-            userVaults[msg.sender].token0 =
-                (userVaults[msg.sender].token0 * (vars.balanceBefore - burnAmount)) /
-                vars.balanceBefore;
-            token0.safeTransfer(msg.sender, amount0);
-        }
-        if (amount1 > 0) {
-            userVaults[msg.sender].token1 =
-                (userVaults[msg.sender].token1 * (vars.balanceBefore - burnAmount)) /
-                vars.balanceBefore;
-            token1.safeTransfer(msg.sender, amount1);
-        }
+
+        userVaults[msg.sender].token0 =
+            (userVaults[msg.sender].token0 * (vars.balanceBefore - burnAmount)) /
+            vars.balanceBefore;
+        if (amount0 > 0) token0.safeTransfer(msg.sender, amount0);
+
+        userVaults[msg.sender].token1 =
+            (userVaults[msg.sender].token1 * (vars.balanceBefore - burnAmount)) /
+            vars.balanceBefore;
+        if (amount1 > 0) token1.safeTransfer(msg.sender, amount1);
 
         emit Burned(msg.sender, burnAmount, amount0, amount1);
     }
