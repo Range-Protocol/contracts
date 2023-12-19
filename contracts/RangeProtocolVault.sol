@@ -608,10 +608,12 @@ contract RangeProtocolVault is
             fee0 = _feesEarned(true, feeGrowthInside0Last, tick, liquidity) + uint256(tokensOwed0);
             fee1 = _feesEarned(false, feeGrowthInside1Last, tick, liquidity) + uint256(tokensOwed1);
             (fee0, fee1) = _netPerformanceFees(fee0, fee1);
+            amount0Current += fee0;
+            amount1Current += fee1;
         }
 
-        uint256 passiveBalance0 = fee0 + token0.balanceOf(address(this));
-        uint256 passiveBalance1 = fee1 + token1.balanceOf(address(this));
+        uint256 passiveBalance0 = token0.balanceOf(address(this));
+        uint256 passiveBalance1 = token1.balanceOf(address(this));
         amount0Current += passiveBalance0 > managerBalance0
             ? passiveBalance0 - managerBalance0
             : passiveBalance0;
