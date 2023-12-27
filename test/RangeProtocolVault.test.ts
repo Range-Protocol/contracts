@@ -558,8 +558,43 @@ describe("RangeProtocolVault", () => {
       await expect(
         vault
           .connect(nonManager)
-          .addLiquidity(lowerTick, upperTick, amount0, amount1, [0, 0])
+          .addLiquidity(
+              lowerTick,
+              upperTick,
+              amount0,
+              amount1,
+              [
+                  amount0.mul(9900).div(10000),
+                amount1.mul(9900).div(10000)
+              ],
+              [
+                  amount0.mul(10100).div(10000),
+                amount1.mul(10100).div(10000)
+              ]
+          )
       ).to.be.revertedWith("Ownable: caller is not the manager");
+    });
+
+    it("should not add liquidity when min amounts are not satisfied", async () => {
+      const { amount0Current, amount1Current } =
+          await vault.getUnderlyingBalances();
+
+      await expect(
+          vault.addLiquidity(
+              lowerTick,
+              upperTick,
+              amount0Current,
+              amount1Current,
+              [
+                amount0Current.mul(10100).div(10000),
+                amount1Current.mul(10100).div(10000)
+              ],
+              [
+                amount0Current.mul(10100).div(10000),
+                amount1Current.mul(10100).div(10000)
+              ]
+          )
+      ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
     });
 
     it("should not add liquidity when max amounts are not satisfied", async () => {
@@ -572,7 +607,14 @@ describe("RangeProtocolVault", () => {
           upperTick,
           amount0Current,
           amount1Current,
-          [amount0Current, amount1Current.div(2)]
+            [
+              amount0Current.mul(9900).div(10000),
+              amount1Current.mul(9900).div(10000)
+            ],
+            [
+              amount0Current.mul(10100).div(10000),
+              amount1Current.div(2)
+            ]
         )
       ).to.be.revertedWithCustomError(vault, "SlippageExceedThreshold");
     });
@@ -615,11 +657,16 @@ describe("RangeProtocolVault", () => {
           liquidityToAdd
         );
       await expect(
-        vault.addLiquidity(lowerTick, upperTick, amount0ToAdd, amount1ToAdd, [
-          amount0ToAdd.mul(10100).div(10000),
-          amount1ToAdd.mul(10100).div(10000),
-        ])
-      )
+        vault.addLiquidity(lowerTick, upperTick, amount0ToAdd, amount1ToAdd,
+            [
+              amount0ToAdd.mul(9900).div(10000),
+              amount1ToAdd.mul(9900).div(10000)
+            ],
+            [
+              amount0ToAdd.mul(10100).div(10000),
+              amount1ToAdd.mul(10100).div(10000)
+            ]
+      ))
         .to.emit(vault, "LiquidityAdded")
         .withArgs(liquidityToAdd, lowerTick, upperTick, anyValue, anyValue)
         .to.emit(vault, "InThePositionStatusSet")
@@ -635,10 +682,14 @@ describe("RangeProtocolVault", () => {
         upperTick,
         amount0Current,
         amount1Current,
-        [
-          amount0Current.mul(10100).div(10000),
-          amount1Current.mul(10100).div(10000),
-        ]
+          [
+            amount0Current.mul(9900).div(10000),
+            amount1Current.mul(9900).div(10000)
+          ],
+          [
+            amount0Current.mul(10100).div(10000),
+            amount1Current.mul(10100).div(10000)
+          ]
       );
       await expect(
         vault.addLiquidity(
@@ -646,7 +697,14 @@ describe("RangeProtocolVault", () => {
           upperTick,
           amount0Current,
           amount1Current,
-          [0, 0]
+            [
+              amount0Current.mul(9900).div(10000),
+              amount1Current.mul(9900).div(10000)
+            ],
+            [
+              amount0Current.mul(10100).div(10000),
+              amount1Current.mul(10100).div(10000)
+            ]
         )
       ).to.be.revertedWithCustomError(vault, "LiquidityAlreadyAdded");
     });

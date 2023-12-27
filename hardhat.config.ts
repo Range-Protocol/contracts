@@ -28,13 +28,13 @@ const config: HardhatUserConfig = {
         url: "https://eth-mainnet.g.alchemy.com/v2/_5K15-wfBoWkGwdonG4o77iUgon8ut3N",
       },
     },
-    chain: {
-      accounts: [],
+    mainnet: {
+      accounts: process.env.PK ? [process.env.PK] : [],
       chainId: 1,
       url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_ID}`,
     },
     tenderly: {
-      accounts: [""],
+      accounts: process.env.PK ? [process.env.PK] : [],
       url: "https://rpc.vnet.tenderly.co/devnet/sop-integration/a3cce0b2-7ec7-4ab7-b587-287ae7df97df",
     },
   },
