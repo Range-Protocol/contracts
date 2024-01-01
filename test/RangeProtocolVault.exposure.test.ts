@@ -388,7 +388,8 @@ describe("RangeProtocolVault::exposure", () => {
       upperTick,
       amount0ToAdd.sub(await vault.managerBalance0()),
       amount1ToAdd.sub(await vault.managerBalance1()),
-      [amount0ToAdd.mul(10100).div(10000), amount1ToAdd.mul(10100).div(10000)]
+      [amount0ToAdd.mul(9900).div(10000), amount1ToAdd.mul(9900).div(10000)],
+        [amount0ToAdd.mul(10100).div(10000), amount1ToAdd.mul(10100).div(10000)]
     );
 
     console.log("==================================================");

@@ -165,13 +165,13 @@ contract RangeProtocolVault is
      * @notice mint mints range vault shares, fractional shares of a Uniswap V3 position/strategy
      * to compute the amount of tokens necessary to mint `mintAmount` see getMintAmounts
      * @param mintAmount The number of shares to mint
-     * @param maxAmounts max amounts to add in token0 and token1.
+     * @param maxAmountsIn max amounts to add in token0 and token1.
      * @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
      * @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
      */
     function mint(
         uint256 mintAmount,
-        uint256[2] calldata maxAmounts
+        uint256[2] calldata maxAmountsIn
     ) external override nonReentrant whenNotPaused returns (uint256 amount0, uint256 amount1) {
         if (!mintStarted) revert VaultErrors.MintNotStarted();
         if (mintAmount == 0) revert VaultErrors.InvalidMintAmount();
@@ -202,7 +202,7 @@ contract RangeProtocolVault is
             revert VaultErrors.MintNotAllowed();
         }
 
-        if (amount0 > maxAmounts[0] || amount1 > maxAmounts[1])
+        if (amount0 > maxAmountsIn[0] || amount1 > maxAmountsIn[1])
             revert VaultErrors.SlippageExceedThreshold();
 
         if (!userVaults[msg.sender].exists) {
@@ -241,13 +241,13 @@ contract RangeProtocolVault is
     /**
      * @notice burn burns range vault shares (shares of a Uniswap V3 position) and receive underlying
      * @param burnAmount The number of shares to burn
-     * @param minAmounts the min desired amounts to be out from burn.
+     * @param minAmountsOut the min desired amounts to be out from burn.
      * @return amount0 amount of token0 transferred to msg.sender for burning {burnAmount}
      * @return amount1 amount of token1 transferred to msg.sender for burning {burnAmount}
      */
     function burn(
         uint256 burnAmount,
-        uint256[2] calldata minAmounts
+        uint256[2] calldata minAmountsOut
     ) external override nonReentrant returns (uint256 amount0, uint256 amount1) {
         if (burnAmount == 0) revert VaultErrors.InvalidBurnAmount();
 
@@ -279,7 +279,7 @@ contract RangeProtocolVault is
             amount1 = FullMath.mulDiv(amount1Current, burnAmount, vars.totalSupply);
         }
 
-        if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+        if (amount0 < minAmountsOut[0] || amount1 < minAmountsOut[1])
             revert VaultErrors.SlippageExceedThreshold();
 
         _applyManagingFee(amount0, amount1);
@@ -301,8 +301,9 @@ contract RangeProtocolVault is
     /**
      * @notice removeLiquidity removes liquidity from uniswap pool and receives underlying tokens
      * in the vault contract.
+     * @param minAmountsOut minimum amounts to get from the pool upon removal of liquidity.
      */
-    function removeLiquidity(uint256[2] calldata minAmounts) external override onlyManager {
+    function removeLiquidity(uint256[2] calldata minAmountsOut) external override onlyManager {
         (uint128 liquidity, , , , ) = pool.positions(getPositionID());
 
         if (liquidity > 0) {
@@ -310,7 +311,7 @@ contract RangeProtocolVault is
             int24 _upperTick = upperTick;
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _withdraw(liquidity);
 
-            if (amount0 < minAmounts[0] || amount1 < minAmounts[1])
+            if (amount0 < minAmountsOut[0] || amount1 < minAmountsOut[1])
                 revert VaultErrors.SlippageExceedThreshold();
 
             emit LiquidityRemoved(liquidity, _lowerTick, _upperTick, amount0, amount1);
@@ -337,7 +338,7 @@ contract RangeProtocolVault is
      * @param sqrtPriceLimitX96 threshold price ratio after the swap.
      * If zero for one, the price cannot be lower (swap make price lower) than this threshold value after the swap
      * If one for zero, the price cannot be greater (swap make price higher) than this threshold value after the swap
-     * @param minAmountIn minimum amount to protect against slippage.
+     * @param minAmountOut minimum amount to protect against slippage.
      * @return amount0 If positive represents exact input token0 amount after this swap, msg.sender paid amount,
      * or exact output token0 amount (negative), msg.sender received amount
      * @return amount1 If positive represents exact input token1 amount after this swap, msg.sender paid amount,
@@ -347,7 +348,7 @@ contract RangeProtocolVault is
         bool zeroForOne,
         int256 swapAmount,
         uint160 sqrtPriceLimitX96,
-        uint256 minAmountIn
+        uint256 minAmountOut
     ) external override onlyManager returns (int256 amount0, int256 amount1) {
         (amount0, amount1) = pool.swap(
             address(this),
@@ -357,8 +358,8 @@ contract RangeProtocolVault is
             ""
         );
         if (
-            (zeroForOne && uint256(-amount1) < minAmountIn) ||
-            (!zeroForOne && uint256(-amount0) < minAmountIn)
+            (zeroForOne && uint256(-amount1) < minAmountOut) ||
+            (!zeroForOne && uint256(-amount0) < minAmountOut)
         ) revert VaultErrors.SlippageExceedThreshold();
 
         emit Swapped(zeroForOne, amount0, amount1);
@@ -371,7 +372,8 @@ contract RangeProtocolVault is
      * @param newUpperTick new upper tick to deposit liquidity into
      * @param amount0 max amount of amount0 to use
      * @param amount1 max amount of amount1 to use
-     * @param maxAmounts max amounts to add for slippage protection
+     * @param minAmountsIn minimum amounts to add for slippage protection
+     * @param maxAmountsIn minimum amounts to add for slippage protection
      * @return remainingAmount0 remaining amount from amount0
      * @return remainingAmount1 remaining amount from amount1
      */
@@ -380,7 +382,8 @@ contract RangeProtocolVault is
         int24 newUpperTick,
         uint256 amount0,
         uint256 amount1,
-        uint256[2] calldata maxAmounts
+        uint256[2] calldata minAmountsIn,
+        uint256[2] calldata maxAmountsIn
     ) external override onlyManager returns (uint256 remainingAmount0, uint256 remainingAmount1) {
         if (inThePosition) revert VaultErrors.LiquidityAlreadyAdded();
 
@@ -401,7 +404,13 @@ contract RangeProtocolVault is
                 baseLiquidity,
                 ""
             );
-            if (amountDeposited0 > maxAmounts[0] || amountDeposited1 > maxAmounts[1])
+
+            if (
+                amountDeposited0 < minAmountsIn[0]
+                || amountDeposited0 > maxAmountsIn[0]
+                || amountDeposited1 < minAmountsIn[1]
+                || amountDeposited1 > maxAmountsIn[1]
+            )
                 revert VaultErrors.SlippageExceedThreshold();
 
             _updateTicks(newLowerTick, newUpperTick);
