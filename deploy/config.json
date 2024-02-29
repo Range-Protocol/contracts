@@ -1,0 +1,10 @@
+{
+  "implementation": "0xa865Be0D6C37a6E84B1864faeBcFB7aB16540a76",
+  "token0": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+  "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "name": "Range Uniswap token0/token1 1% LP",
+  "symbol": "R-UNI",
+  "manager": "0x278E468e73B661780A5985DB366B3C67d8Af78b4",
+  "ammFactory": "0x411b0fAcC3489691f28ad58c47006AF5E3Ab3A28",
+  "rangeFactory": "0x95142498886E95939aFefe44461dcEfcCdeee684"
+}
